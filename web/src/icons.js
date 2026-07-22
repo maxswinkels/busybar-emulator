@@ -1,0 +1,26 @@
+// Inline SVG icons (stroke=currentColor), matching the real interface's i-bi-* set.
+const s = (inner, sw = 1.8) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+export const icons = {
+  wifi: s('<path d="M2 9c6-5 14-5 20 0M5 12.5c4-3.3 10-3.3 14 0M8.5 16c2-1.6 5-1.6 7 0"/><circle cx="12" cy="19" r="1"/>'),
+  chip: s('<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>'),
+  hexagon: s('<path d="M12 2l8.7 5v10L12 22l-8.7-5V7z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>'),
+  palette: s('<path d="M12 3a9 9 0 100 18c1 0 1.5-.8 1.5-1.5 0-.5-.3-.8-.3-1.2 0-.7.6-1.3 1.3-1.3H16a5 5 0 005-5c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="10.5" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="16.5" cy="10.5" r="1"/>'),
+  sound: s('<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a4 4 0 010 7M18 6a7 7 0 010 12"/>'),
+  soundOff: s('<path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="17" y1="9" x2="23" y2="15"/><line x1="23" y1="9" x2="17" y2="15"/>'),
+  brightness: s('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  brightnessAuto: s('<circle cx="12" cy="12" r="4"/><path d="M12 3v1M12 20v1M20 12h1M3 12h1"/>'),
+  globe: s('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/>'),
+  matter: s('<path d="M3 10v4M7 8v8M12 5v14M17 8v8M21 10v4"/>'),
+  info: s('<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>'),
+  plus: s('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', 2),
+  clock: s('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  list: s('<path d="M4 7h16M4 12h16M4 17h10"/>'),
+  text: s('<path d="M4 6h16M4 6v-.5M9 6v13M15 6v13"/>'),
+  square: s('<rect x="4" y="6" width="16" height="12" rx="2"/>'),
+  image: s('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5-6 6"/>'),
+  film: s('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>'),
+  trash: s('<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>'),
+  usb: s('<circle cx="12" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M12 20V6M12 6l-2.2 3M12 6l2.2 3M12 13l-4-2.2v-2M12 11l4-2.2V6.5"/>'),
+  battery: s('<rect x="2" y="8" width="17" height="9" rx="2"/><path d="M21 11v3"/><rect x="4" y="10" width="11" height="5" rx="1" fill="currentColor" stroke="none"/>'),
+  play: s('<polygon points="5,3 19,12 5,21" fill="currentColor" stroke="none"/>'),
+}

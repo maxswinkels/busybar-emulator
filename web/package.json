@@ -1,0 +1,8 @@
+{
+  "name": "busybar-emulator-web",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "dependencies": { "vue": "^3.5.13", "konva": "^9.3.16", "vue-konva": "^3.2.0" },
+  "devDependencies": { "@vitejs/plugin-vue": "^5.2.1", "vite": "^6.0.7" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "busybar-emulator",
+  "version": "1.0.0",
+  "description": "Local emulator of the Flipper BUSY Bar: mock HTTP API + live LED display",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

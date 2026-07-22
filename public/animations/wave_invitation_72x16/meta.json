@@ -1,0 +1,11 @@
+{
+   "fps": 60,
+   "color_mode": "rgb888",
+   "sections": [
+      {
+         "name": "idle",
+         "start": 0,
+         "end": 0
+      }
+   ]
+}

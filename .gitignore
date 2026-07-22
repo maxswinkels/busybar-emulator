@@ -1,0 +1,16 @@
+node_modules/
+web/node_modules/
+web/dist/
+__pycache__/
+*.pyc
+.DS_Store
+
+# macOS archive artifacts (from unzipping asset packs)
+__MACOSX/
+._*
+
+# Personal, machine-local Claude Code settings (shared config lives in settings.json)
+.claude/settings.local.json
+
+# Browser-automation session artifacts
+.playwright-mcp/
