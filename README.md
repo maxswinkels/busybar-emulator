@@ -154,7 +154,7 @@ Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and as
 <summary>Fidelity notes</summary>
 
 - **Rendering is a faithful approximation.** Assets decode in the browser (1 image pixel = 1 LED), the front display applies gamma 0.35, and the back OLED is grayscale. `busy_tiny` is bitmap-only and falls back to `busy_regular_5px`.
-- **Priority/409 is softened.** Draws are rejected only when strictly lower than the current owner's priority. The real device may also defer conflicting requests for up to 1.5 s.
+- **Priority/409 matches the firmware's core rule.** The current owner may redraw at equal priority; a different app needs strictly higher priority to take the screen (else 409). Not emulated: the real device may defer a conflicting request for up to 1.5 s, merges same-app elements by `id`, and expires elements via per-element timeouts.
 - **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, `/api/_apps*` (app runner) and `/api/_scenario*` (scenario simulator) are emulator conveniences.
 
 </details>

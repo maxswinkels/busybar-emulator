@@ -218,8 +218,13 @@ function scenarioInfo() {
   };
 }
 // Priority-conflict rule shared by POST /api/display/draw and the steal scenario.
+// Firmware (canvas_draw_rejected): the current owner may redraw at equal
+// priority; a different app needs strictly higher priority to take over.
 function drawFrame(appName, elements, priority) {
-  if (state.frame.elements.length && priority < state.frame.priority) return false;
+  if (state.frame.elements.length) {
+    const sameApp = appName === state.frame.application_name;
+    if (sameApp ? priority < state.frame.priority : priority <= state.frame.priority) return false;
+  }
   state.frame = { application_name: appName, elements, ts: frameSeq++, priority };
   return true;
 }
