@@ -28,4 +28,4 @@ def tick():
 
 if __name__ == "__main__":
     print(f"clock → {bar.base}  (Ctrl-C to stop)")
-    run_loop(tick, interval=1.0)
+    run_loop(tick, interval=1.0, cleanup=lambda: bar.display_clear(APP))

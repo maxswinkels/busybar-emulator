@@ -69,4 +69,4 @@ if __name__ == "__main__":
     print(f"weather → {bar.base}  (Ctrl-C to stop)")
     setup()
     from busybar import run_loop
-    run_loop(tick, interval=5.0)
+    run_loop(tick, interval=5.0, cleanup=lambda: bar.display_clear(APP))

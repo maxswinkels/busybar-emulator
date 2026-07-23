@@ -6,6 +6,7 @@ for a real call to your CI (GitHub Actions API, webhook, etc.).
 
     python3 apps/deploy_monitor.py [--host 127.0.0.1:8080]
 """
+import signal
 import time
 from busybar import BusyBar, text, image, host_from_argv
 
@@ -47,6 +48,10 @@ def render(label, ok):
 
 
 if __name__ == "__main__":
+    try:
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    except ValueError:
+        pass
     print(f"deploy monitor → {bar.base}  (Ctrl-C to stop)")
     try:
         while True:
@@ -59,3 +64,8 @@ if __name__ == "__main__":
             time.sleep(4)
     except KeyboardInterrupt:
         print("\nstopped.")
+    finally:
+        try:
+            bar.display_clear(APP)
+        except Exception:
+            pass

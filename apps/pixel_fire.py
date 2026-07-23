@@ -272,4 +272,4 @@ def tick():
 
 if __name__ == "__main__":
     print(f"pixel_fire [{EFFECT}] → {bar.base}  (Ctrl-C to stop)")
-    run_loop(tick, interval=0.05)
+    run_loop(tick, interval=0.05, cleanup=lambda: bar.display_clear(APP))

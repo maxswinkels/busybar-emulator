@@ -3,6 +3,7 @@
 
     python3 apps/ping_monitor.py [--target 8.8.8.8] [--host 127.0.0.1:8080]
 """
+import signal
 import subprocess
 import sys
 import time
@@ -59,6 +60,10 @@ def tick():
 
 
 if __name__ == "__main__":
+    try:
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    except ValueError:
+        pass
     print(f"ping {target} → {bar.base}  (Ctrl-C to stop)")
     try:
         while True:
@@ -66,3 +71,8 @@ if __name__ == "__main__":
             time.sleep(1.5)
     except KeyboardInterrupt:
         print("\nstopped.")
+    finally:
+        try:
+            bar.display_clear(APP)
+        except Exception:
+            pass

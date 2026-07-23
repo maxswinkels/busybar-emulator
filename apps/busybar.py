@@ -10,6 +10,7 @@ swapping the host.
     bar.display_draw("my.app", [text("HI", x=36, y=8, font="extra_large", align="center")])
 """
 import json
+import signal
 import time
 import urllib.request
 import urllib.error
@@ -206,13 +207,32 @@ class BusyBar:
         return self._req("POST", "/api/input", query={"key": key})
 
 
-def run_loop(fn, interval=1.0):
+def run_loop(fn, interval=1.0, cleanup=None):
+    def _sigterm(*_):
+        raise SystemExit(0)
+    try:
+        signal.signal(signal.SIGTERM, _sigterm)
+    except ValueError:
+        pass  # not the main thread
     try:
         while True:
-            fn()
+            try:
+                fn()
+            except BusyBarError as e:
+                print(f"error: {e}")
+                if "409" in str(e):
+                    print("hint: another app owns the display — stop it or "
+                          "curl -X DELETE http://<host>/api/display/draw")
+                raise SystemExit(1)
             time.sleep(interval)
     except KeyboardInterrupt:
         print("\nstopped.")
+    finally:
+        if cleanup:
+            try:
+                cleanup()
+            except Exception:
+                pass
 
 
 def host_from_argv(default="127.0.0.1:8080"):

@@ -178,4 +178,4 @@ def tick():
 
 if __name__ == "__main__":
     print(f"mac_monitor → {bar.base}  (Ctrl-C to stop)")
-    run_loop(tick, interval=2.0)
+    run_loop(tick, interval=2.0, cleanup=lambda: bar.display_clear(APP))

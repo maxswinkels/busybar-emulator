@@ -2,7 +2,12 @@
   <div class="panel">
     <!-- app list -->
     <div class="card glass">
-      <h2 class="card-title"><span class="badge" v-html="icons.play"></span>Apps</h2>
+      <h2 class="card-title">
+        <span class="badge" v-html="icons.play"></span>Apps
+        <button class="pill" style="margin-left:auto;font-size:11px;padding:2px 10px"
+          title="Release the display (DELETE /api/display/draw)"
+          @click="clearDisplay">Clear display</button>
+      </h2>
       <div class="apps-list">
         <div
           v-for="app in appList" :key="app.name"
@@ -80,7 +85,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { device, apiJson, apiGet } from '../../composables/useDevice'
+import { device, api, apiJson, apiGet } from '../../composables/useDevice'
 import { icons } from '../../icons'
 
 const appList = ref([])
@@ -139,6 +144,10 @@ async function run(app) {
 async function stop() {
   startError.value = ''
   await apiJson('POST', '/api/_apps/stop', {})
+}
+
+async function clearDisplay() {
+  await api('DELETE', '/api/display/draw')
 }
 
 // auto-scroll when near bottom

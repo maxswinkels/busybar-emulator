@@ -161,7 +161,7 @@ function stopApp() {
     const child = appProc.child;
     let done = false;
     child.once("exit", () => { if (!done) { done = true; resolve(true); } });
-    try { process.kill(-child.pid, "SIGINT"); } catch (_) { child.kill("SIGINT"); }
+    try { process.kill(-child.pid, "SIGTERM"); } catch (_) { child.kill("SIGTERM"); }
     setTimeout(() => { if (!done) { done = true; try { process.kill(-child.pid, "SIGKILL"); } catch (_) { try { child.kill("SIGKILL"); } catch (_2) {} } resolve(true); } }, 1500);
   });
 }
