@@ -201,7 +201,14 @@ function isLocal(req) { const a = req.socket.remoteAddress || ""; return a === "
 function authed(req) { if (!TOKEN) return true; if (isLocal(req)) return true; return req.headers["x-api-token"] === TOKEN; }
 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".ttf": "font/ttf", ".woff2": "font/woff2", ".json": "application/json" };
+// Decode percent-escapes and resolve inside root (frame files may contain spaces).
+function staticPath(root, sub) {
+  let rel; try { rel = decodeURIComponent(sub); } catch (_) { return null; }
+  const file = path.join(root, rel);
+  return file.startsWith(root + path.sep) ? file : null;
+}
 function serveStatic(res, file) {
+  if (!file) { fail(res, 404, "not found"); return; }
   fs.readFile(file, (err, buf) => {
     if (err) { fail(res, 404, "not found"); return; }
     const ext = path.extname(file);
@@ -222,13 +229,13 @@ const server = http.createServer(async (req, res) => {
 
   // static + stream (no auth)
   if (method === "GET" && (p === "/" || p === "/index.html")) return serveStatic(res, fs.existsSync(path.join(DIST, "index.html")) ? path.join(DIST, "index.html") : path.join(PUBLIC, "index.html"));
-  if (method === "GET" && p.startsWith("/static/")) return serveStatic(res, path.join(DIST, p.replace(/^\//, "")));
+  if (method === "GET" && p.startsWith("/static/")) return serveStatic(res, staticPath(DIST, p.replace(/^\//, "")));
   if (method === "GET" && p === "/events") {
     res.writeHead(200, Object.assign({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" }, CORS));
     res.write("retry: 2000\n\n"); res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`);
     clients.add(res); req.on("close", () => clients.delete(res)); return;
   }
-  if (method === "GET" && (p.startsWith("/public/") || p.startsWith("/animations/"))) return serveStatic(res, path.join(PUBLIC, p.replace(/^\/public\//, "").replace(/^\//, "")));
+  if (method === "GET" && (p.startsWith("/public/") || p.startsWith("/animations/"))) return serveStatic(res, staticPath(PUBLIC, p.replace(/^\/public\//, "").replace(/^\//, "")));
   if (method === "GET" && p === "/api/_animations") return send(res, 200, ANIMATIONS);
   if (method === "GET" && p.startsWith("/assets/")) {
     const a = state.assets[decodeURIComponent(p.slice("/assets/".length))];
