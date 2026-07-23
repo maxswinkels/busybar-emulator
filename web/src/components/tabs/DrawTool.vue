@@ -47,6 +47,12 @@
             <span>{{ s.type }} · {{ s.type==='text' ? '"'+s.text+'"' : s.type==='image' ? s.stock : (s.w+'×'+s.h) }}</span>
             <button class="x" @click.stop="remove(s.id)">✕</button>
           </div>
+          <div class="toolbar" style="margin-top:8px;gap:6px;align-items:center">
+            <span style="font-size:12px;color:var(--muted)">Copy as</span>
+            <button class="pill" @click="exportPython">Python</button>
+            <button class="pill" @click="exportCurl">curl</button>
+            <button class="pill" @click="exportJson">JSON</button>
+          </div>
         </div>
         <span class="status-line" :class="statusCls">{{ status }}</span>
       </div>
@@ -59,6 +65,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { apiJson, api, apiGet } from '../../composables/useDevice'
 import { loadAtlas, rasterize } from '../../lib/atlas'
 import { icons } from '../../icons'
+import { toJson, toCurl, toPython } from '../../lib/exporters'
 
 const W = 72, H = 16, cell = 13
 const FONTS = ['tiny', 'small', 'normal', 'condensed', 'bold', 'large', 'extra_large', 'global']
@@ -164,6 +171,24 @@ function push() {
     statusCls.value = 'status-line ' + (r.status === 200 ? 'ok' : 'err')
   }, 140)
 }
+
+/* export as code */
+function buildPayload() {
+  return { application_name: 'draw_tool', priority: 50, elements: shapes.map(toElement) }
+}
+async function copyToClipboard(text, format) {
+  try {
+    await navigator.clipboard.writeText(text)
+    status.value = `copied ${format} to clipboard`
+    statusCls.value = 'status-line ok'
+  } catch (e) {
+    status.value = 'clipboard error: ' + (e.message || 'unknown')
+    statusCls.value = 'status-line err'
+  }
+}
+function exportJson() { copyToClipboard(toJson(buildPayload()), 'JSON') }
+function exportCurl() { copyToClipboard(toCurl(buildPayload(), window.location.origin), 'curl') }
+function exportPython() { copyToClipboard(toPython(buildPayload()), 'Python') }
 
 watch(shapes, () => { paint(); push() }, { deep: true })
 watch(selId, paint)

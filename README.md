@@ -177,7 +177,7 @@ The goal is the fastest way to build, test and show off BUSY Bar apps, with or w
 **Content creation**
 
 - [ ] **Animation editor**: build and export frame-by-frame 72×16 animations in the device format
-- [ ] **Copy as code**: export any draw-tool composition as a ready-to-paste `draw` payload (Python / curl / JSON)
+- [x] **Copy as code**: export any draw-tool composition as a ready-to-paste `draw` payload (Python / curl / JSON)
 - [ ] **Status gallery**: save, browse and re-push compositions like the device does
 
 ## Get the real thing
