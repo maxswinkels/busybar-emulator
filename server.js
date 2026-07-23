@@ -66,6 +66,8 @@ const APP_PARAMS = {
   "busy_status.py": [{ key: "theme", label: "Theme", type: "select", positional: true, default: "on_air",
     options: ["keep_out","dnd","meeting","on_call","lunch","back_soon","booked","flow","chill_time","on_air","coding","low_social_battery"] }],
   "ping_monitor.py": [{ key: "target", label: "Target", type: "text", flag: "--target", placeholder: "8.8.8.8" }],
+  "pixel_fire.py": [{ key: "effect", label: "Effect", type: "select", positional: true, default: "fire",
+    options: ["fire", "rain", "plasma"] }],
   "sound_test.py": [{ key: "sound", label: "Sound", type: "select", positional: true, default: "all",
     options: ["all", ...Object.keys(SOUNDS).sort()] }],
 };
