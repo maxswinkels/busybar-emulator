@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> &middot; <a href="#the-api">API</a> &middot; <a href="docs/ATTRIBUTION.md">Attribution</a>
+  <a href="#quick-start">Quick start</a> &middot; <a href="https://maxswinkels.github.io/busybar-apps/">Community apps</a> &middot; <a href="#the-api">API</a> &middot; <a href="docs/ATTRIBUTION.md">Attribution</a>
 </p>
 
 <p align="center">
@@ -57,6 +57,10 @@ python3 apps/mac_monitor.py        # CPU / RAM / network bars from your Mac
 
 > [!TIP]
 > Take any real BUSY Bar example script, point its host at `127.0.0.1:8080`, and it just works. The API is identical, right down to accepting `app_id`.
+
+## Share your apps
+
+Built something cool? Share it in the [community gallery](https://maxswinkels.github.io/busybar-apps/). Browse what others made, or submit your own via pull request to [busybar-apps](https://github.com/maxswinkels/busybar-apps).
 
 ## Features
 
