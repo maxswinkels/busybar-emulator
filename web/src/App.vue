@@ -7,7 +7,7 @@
       </div>
       <div class="h-center">BUSY Bar Emulator</div>
       <div class="h-right">
-        <span class="batt"><span class="bico" :class="{ live: device.connected }" v-html="icons.battery"></span>{{ device.battery_charge }}%</span>
+        <span class="batt"><span class="bico" :class="[{ live: device.connected }, batteryTier]" v-html="batteryIcon"></span>{{ device.battery_charge }}%</span>
         <button class="icon-btn" title="Toggle light / dark" @click="toggleTheme">{{ themeGlyph }}</button>
       </div>
     </header>
@@ -36,7 +36,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { device } from './composables/useDevice'
-import { icons } from './icons'
+import { icons, batteryIcons } from './icons'
 import Preview from './components/Preview.vue'
 import Tabs from './components/Tabs.vue'
 import TabSettings from './components/tabs/Settings.vue'
@@ -49,6 +49,22 @@ import TabScenarios from './components/tabs/Scenarios.vue'
 const tab = ref('settings')
 const host = location.host || '127.0.0.1:8080'
 const year = new Date().getFullYear()
+
+// Same selection as the firmware web app's BatteryIndicator component.
+const batteryIcon = computed(() => {
+  const c = device.battery_charge ?? 0, st = device.scenario?.power_state ?? ''
+  return st === 'charging' ? batteryIcons.charging
+    : st === 'charged' || c >= 95 ? batteryIcons.full
+    : c >= 66 ? batteryIcons.discharging1
+    : c >= 33 ? batteryIcons.discharging2
+    : c >= 0 ? batteryIcons.discharging3
+    : batteryIcons.error
+})
+// Emulator-only tint: green above 50%, orange from 50%, red from 20%.
+const batteryTier = computed(() => {
+  const c = device.battery_charge ?? 0
+  return c <= 20 ? 'low' : c <= 50 ? 'mid' : 'high'
+})
 
 const logoSvg = ref('')
 onMounted(() => { fetch('/public/brand/logo-white.svg').then(r => r.text()).then(t => logoSvg.value = t).catch(() => {}) })
