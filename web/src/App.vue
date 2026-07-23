@@ -13,15 +13,17 @@
     </header>
 
     <Preview />
-    <Tabs v-model="tab" />
 
-    <main>
-      <TabSettings v-if="tab === 'settings'" />
-      <TabNetwork v-else-if="tab === 'network'" />
-      <TabFirmware v-else-if="tab === 'firmware'" />
-      <TabDrawTool v-else-if="tab === 'draw-tool'" />
-      <TabApps v-else-if="tab === 'apps'" />
-    </main>
+    <div class="content-grid">
+      <Tabs v-model="tab" />
+      <main>
+        <TabSettings v-if="tab === 'settings'" />
+        <TabNetwork v-else-if="tab === 'network'" />
+        <TabFirmware v-else-if="tab === 'firmware'" />
+        <TabDrawTool v-else-if="tab === 'draw-tool'" />
+        <TabApps v-else-if="tab === 'apps'" />
+      </main>
+    </div>
 
     <footer class="app-footer">
       <span>© {{ year }} <a href="https://github.com/maxswinkels" target="_blank" rel="noopener">Max Swinkels</a> · <a href="https://github.com/maxswinkels/busybar-emulator/blob/main/LICENSE" target="_blank" rel="noopener">MIT license</a></span>

@@ -26,7 +26,7 @@
 body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;-webkit-font-smoothing:antialiased}
 #app{padding:22px 16px 60px}
 button{font-family:inherit}
-.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.wrap{margin:0 auto;display:flex;flex-direction:column;gap:18px}
 .glass{background:var(--card);border-radius:24px;box-shadow:inset 0 1px 1px 0 var(--ring-in),0 0 0 1px var(--ring-out),0 18px 40px -28px rgba(0,0,0,.5)}
 
 .app-header{position:relative;height:48px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 2px}
@@ -55,12 +55,19 @@ button{font-family:inherit}
 canvas.oled{display:block;width:168px;height:84px;image-rendering:pixelated;border-radius:3px}
 
 .tabs{display:flex;gap:8px;overflow-x:auto;padding:2px;justify-content:center}
-.tab{display:grid;grid-template-columns:24px auto;align-items:center;gap:10px;padding:11px 16px;border-radius:14px;cursor:pointer;white-space:nowrap;color:var(--muted);font-size:15px;font-weight:500;transition:.15s;user-select:none;border:1px solid transparent}
+.tab{display:grid;grid-template-columns:24px auto;align-items:center;gap:10px;padding:12px;border-radius:12px;cursor:pointer;white-space:nowrap;color:var(--muted);font-size:15px;font-weight:500;transition:.15s;user-select:none;border:1px solid transparent}
 .tab:hover{color:var(--text)}
 .tab svg{width:22px;height:22px}
 .tab.active{color:var(--text);background:var(--elevated);box-shadow:inset 0 1px 1px 0 var(--ring-in),0 0 0 1px var(--ring-out)}
 
-main{display:flex;flex-direction:column;gap:16px}
+.content-grid{display:flex;flex-direction:column;gap:18px}
+/* ≥1280px: match firmware layout — tabs as sticky left sidebar in a
+   [160px auto 160px] grid, right column is an empty spacer (firmware xl) */
+@media(min-width:1280px){
+  .content-grid{display:grid;grid-template-columns:160px auto 160px;gap:0;align-items:start;width:100%}
+  .tabs{flex-direction:column;width:160px;justify-content:flex-start;overflow:visible;position:sticky;top:16px;align-self:start}
+}
+main{display:flex;flex-direction:column;gap:16px;width:100%;max-width:688px;margin:0 auto}
 .app-footer{display:flex;flex-direction:column;gap:3px;align-items:center;text-align:center;padding:4px 0 18px;font-size:12px;color:var(--faint);line-height:1.6}
 .app-footer a{color:var(--muted);text-decoration:none}
 .app-footer a:hover{text-decoration:underline}
