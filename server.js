@@ -299,6 +299,7 @@ const server = http.createServer(async (req, res) => {
   // static + stream (no auth)
   if (method === "GET" && (p === "/" || p === "/index.html")) return serveStatic(res, fs.existsSync(path.join(DIST, "index.html")) ? path.join(DIST, "index.html") : path.join(PUBLIC, "index.html"));
   if (method === "GET" && p.startsWith("/static/")) return serveStatic(res, staticPath(DIST, p.replace(/^\//, "")));
+  if ((method === "GET" || method === "HEAD") && p === "/favicon.png") return serveStatic(res, path.join(DIST, "favicon.png"));
   if (method === "GET" && p === "/events") {
     res.writeHead(200, Object.assign({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" }, CORS));
     res.write("retry: 2000\n\n"); res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`);

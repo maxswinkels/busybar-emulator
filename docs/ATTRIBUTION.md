@@ -8,7 +8,7 @@ All assets listed below are sourced from the open-source firmware repository htt
 
 **`public/icons/`** and **`public/icons.json`**: Stock icon set (66 SVG icons from the device draw tool: faces/emoji-grinning, sun, cloud, heart, check, bolt, and more). Licensed under CC-BY 4.0 (attribution required).
 
-**`public/brand/`** and **`.github/logo.svg`**: BUSY logo, app icon and device render (busybar-device.png illustration used in the web UI; favicon used as the repository logo). Licensed under CC-BY 4.0 (attribution required).
+**`public/brand/`**, **`.github/logo.svg`** and **`web/public/favicon.png`**: BUSY logo, app icon and device render (busybar-device.png illustration used in the web UI; favicon used as the repository logo and web UI icon). Licensed under CC-BY 4.0 (attribution required).
 
 ## Sounds (CC-BY-SA 4.0)
 

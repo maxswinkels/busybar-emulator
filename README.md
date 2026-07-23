@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/logo.svg" width="112" alt="BUSY Bar" />
+  <img src=".github/logo.svg" width="180" alt="BUSY" />
 </p>
 
 <h1 align="center">BUSY Bar Emulator</h1>
