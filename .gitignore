@@ -15,3 +15,6 @@ __MACOSX/
 
 # Browser-automation session artifacts
 .playwright-mcp/
+
+# Your own apps: anything in apps/local/ is listed in the UI but never committed
+apps/local/

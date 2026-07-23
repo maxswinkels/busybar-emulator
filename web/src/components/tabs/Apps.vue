@@ -2,14 +2,17 @@
   <div class="panel">
     <!-- app list -->
     <div class="card glass">
-      <h2 class="card-title"><span class="badge" v-html="icons.play"></span>Example apps</h2>
+      <h2 class="card-title"><span class="badge" v-html="icons.play"></span>Apps</h2>
       <div class="apps-list">
         <div
           v-for="app in appList" :key="app.name"
           class="app-row" :class="{ running: device.app.name === app.name && device.app.running }"
         >
           <div class="app-row-info">
-            <span class="app-name">{{ app.name }}</span>
+            <div class="app-name-row">
+              <span class="app-name">{{ app.name.split('/').pop() }}</span>
+              <span v-if="app.local" class="app-tag">local</span>
+            </div>
             <span class="app-desc">{{ app.description }}</span>
           </div>
           <div class="app-row-controls" v-if="app.params && app.params.length">

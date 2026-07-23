@@ -168,7 +168,9 @@ textarea:focus{outline:none;box-shadow:0 0 0 2px var(--brand)}
 .app-row{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;background:var(--elevated);border:1px solid transparent;transition:.15s}
 .app-row.running{border-color:var(--brand);box-shadow:0 0 0 1px rgba(var(--amb),.25)}
 .app-row-info{display:flex;flex-direction:column;gap:3px}
+.app-name-row{display:flex;align-items:center;gap:6px}
 .app-name{font-family:var(--mono);font-size:13.5px;font-weight:600}
+.app-tag{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--track);color:var(--muted);background:transparent;margin-left:6px}
 .app-desc{font-size:12.5px;color:var(--muted);line-height:1.4}
 .app-row-controls{display:flex;gap:8px;align-items:center}
 .app-args{flex:1;background:var(--card);border:1px solid var(--ring-out);color:var(--text);border-radius:9px;padding:7px 10px;font-family:var(--mono);font-size:12.5px}

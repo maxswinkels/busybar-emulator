@@ -73,17 +73,25 @@ const APP_PARAMS = {
 };
 
 function scanApps() {
-  let files = [];
-  try { files = fs.readdirSync(APPS_DIR).filter((f) => f.endsWith(".py") && f !== "busybar.py" && !f.startsWith("_")); } catch (_) { return []; }
-  return files.map((file) => {
-    let description = file.replace(".py", "");
-    try {
-      const head = fs.readFileSync(path.join(APPS_DIR, file), "utf8").slice(0, 2048);
-      const m = head.match(/"""[\s\n]*([^\n"]+)/);
-      if (m) description = m[1].trim();
-    } catch (_) {}
-    return { name: file.replace(".py", ""), file, description, params: APP_PARAMS[file] || [] };
-  });
+  const scan = (dir, prefix = "") => {
+    let files = [];
+    try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".py") && f !== "busybar.py" && !f.startsWith("_")); } catch (_) { return []; }
+    return files.map((file) => {
+      let description = file.replace(".py", "");
+      try {
+        const head = fs.readFileSync(path.join(dir, file), "utf8").slice(0, 2048);
+        const m = head.match(/"""[\s\n]*([^\n"]+)/);
+        if (m) description = m[1].trim();
+      } catch (_) {}
+      const name = prefix ? `${prefix}/${file.replace(".py", "")}` : file.replace(".py", "");
+      const entry = { name, file: prefix ? `${prefix}/${file}` : file, description, params: APP_PARAMS[file] || [] };
+      if (prefix) entry.local = true;
+      return entry;
+    });
+  };
+  const topLevel = scan(APPS_DIR);
+  const local = scan(path.join(APPS_DIR, "local"), "local");
+  return topLevel.concat(local);
 }
 
 let appProc = null;  // { child, name, pid, startedAt, exitCode, error, output, buf }
