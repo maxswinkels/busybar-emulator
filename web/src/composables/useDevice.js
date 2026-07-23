@@ -20,7 +20,7 @@ function apply(st) {
 function connect() {
   const es = new EventSource('/events')
   es.addEventListener('state', e => { try { apply(JSON.parse(e.data)) } catch (_) {} })
-  es.addEventListener('beep', () => beepCb && beepCb())
+  es.addEventListener('beep', (e) => { let p = {}; try { p = JSON.parse(e.data || '{}') } catch (_) {} beepCb && beepCb(p) })
   es.onopen = () => { device.connected = true }
   es.onerror = () => { device.connected = false }
 }

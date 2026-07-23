@@ -20,7 +20,7 @@ let r = null
 onMounted(() => {
   r = createRenderer(matrix.value, oled.value, () => device, () => device.frameStamp)
   r.start()
-  onBeep(() => r && r.beep())
+  onBeep((p) => r && r.sound(p))
 })
 onBeforeUnmount(() => r && r.stop())
 </script>

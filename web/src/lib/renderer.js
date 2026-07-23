@@ -196,6 +196,18 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
   let actx = null;
   function beep() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(); o.type = "square"; o.frequency.value = 880; g.gain.value = 0.05; o.connect(g); g.connect(actx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.18); o.stop(actx.currentTime + 0.2); } catch (_) {} }
 
+  let curAudio = null;
+  function sound(payload) {
+    if (!payload || payload.stop) { if (curAudio) { curAudio.pause(); curAudio = null; } return; }
+    if (payload.url) {
+      const vol = (getModel().volume != null ? getModel().volume : 0) / 100;
+      if (vol <= 0) return;
+      if (curAudio) { curAudio.pause(); curAudio = null; }
+      const a = new Audio(payload.url); a.volume = vol; curAudio = a; a.play().catch(() => {}); return;
+    }
+    beep();
+  }
+
   let last = performance.now() / 1000, oledTick = 0, running = false;
   function frame(now) {
     if (!running) return;
@@ -209,5 +221,5 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
     oledTick += DT; if (oledTick > 0.25) { drawOled(model); oledTick = 0; }
     requestAnimationFrame(frame);
   }
-  return { start() { if (running) return; running = true; requestAnimationFrame(frame); }, stop() { running = false; }, beep };
+  return { start() { if (running) return; running = true; requestAnimationFrame(frame); }, stop() { running = false; }, beep, sound };
 }

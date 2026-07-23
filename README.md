@@ -165,7 +165,7 @@ The goal is the fastest way to build, test and show off BUSY Bar apps, with or w
 
 - [ ] **Screen stream (`/api/screen`)**: serve the real framebuffer so the official web app and third-party tools can target the emulator
 - [ ] **Back OLED (160×80)**: render `display:"back"` elements
-- [ ] **Audio playback**: play stock and uploaded sounds, not just a beep
+- [x] **Audio playback**: play stock and uploaded sounds, with a beep fallback
 
 **SDK &amp; distribution**
 

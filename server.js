@@ -20,6 +20,7 @@ const APPS_DIR = path.join(__dirname, "apps");
 const PUBLIC = path.join(__dirname, "public");
 const DIST = path.join(__dirname, "web", "dist");   // built Vue app
 const ANIM_DIR = path.join(PUBLIC, "animations");
+const SOUNDS_DIR = path.join(PUBLIC, "sounds");
 const API_SEMVER = "25.0.0";
 
 /* --------------------------- animation manifest -------------------------- */
@@ -49,6 +50,16 @@ function scanAnimations() {
   return out;
 }
 const ANIMATIONS = scanAnimations();
+
+/* ---------------------------- sounds manifest ---------------------------- */
+function scanSounds() {
+  const out = {};
+  let files = [];
+  try { files = fs.readdirSync(SOUNDS_DIR); } catch (_) { return out; }
+  for (const f of files) { if (/\.(wav|mp3|ogg)$/i.test(f)) out[path.basename(f, path.extname(f))] = f; }
+  return out;
+}
+const SOUNDS = scanSounds();
 
 /* --------------------------------- apps ---------------------------------- */
 const APP_PARAMS = {
@@ -312,8 +323,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* ---- audio ---- */
-    if (p === "/api/audio/play" && method === "POST") { const b = await readJson(req); logCall("POST", p, b.stock_path || b.path || ""); emit("beep", { path: b.path || b.stock_path || "" }); return ok(res); }
-    if (p === "/api/audio/play" && method === "DELETE") { logCall("DELETE", p, "stop"); return ok(res); }
+    if (p === "/api/audio/play" && method === "POST") {
+      const b = await readJson(req);
+      if (!b.application_name) return fail(res, 400, "Missing application_name");
+      if (b.path && b.stock_path) return fail(res, 400, "Both path and stock_path are defined");
+      if (!b.path && !b.stock_path) return fail(res, 400, "Missing path or stock_path");
+      logCall("POST", p, b.stock_path || b.path || "");
+      let url = null;
+      if (b.stock_path) { const key = b.stock_path in SOUNDS ? b.stock_path : path.basename(b.stock_path); if (SOUNDS[key]) url = "/public/sounds/" + SOUNDS[key]; }
+      if (!url && b.path) { if (state.assets[b.path]) url = "/assets/" + b.path; else if (state.storage[b.path]) url = "/api/storage/read?path=" + encodeURIComponent(b.path); }
+      // firmware 404s an unplayable file; no stock sounds are bundled, so unresolved paths 200 + beep fallback (emulator-only)
+      emit("beep", { url, path: b.path || null, stock_path: b.stock_path || null }); return ok(res);
+    }
+    if (p === "/api/audio/play" && method === "DELETE") { logCall("DELETE", p, "stop"); emit("beep", { stop: true }); return ok(res); }
     if (p === "/api/audio/volume") {
       if (method === "GET") { logCall("GET", p); return send(res, 200, { volume: state.volume }); }
       if (method === "POST") { const n = Number(q.volume); if (!(n >= 0 && n <= 100)) return fail(res, 400, "Bad request: volume 0-100"); state.volume = n; logCall("POST", p, `vol ${n}`); broadcast(); return ok(res); }
