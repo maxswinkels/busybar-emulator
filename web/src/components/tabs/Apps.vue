@@ -46,28 +46,37 @@
       <div v-if="startError" class="status-line err" style="margin-top:10px">{{ startError }}</div>
     </div>
 
-    <!-- output -->
-    <div class="card glass app-out" v-if="device.app.name">
-      <div class="app-out-header">
-        <span class="app-out-name">{{ device.app.name }}</span>
-        <span class="status-line" :class="device.app.running ? 'ok' : (device.app.error ? 'err' : '')">
-          <template v-if="device.app.running">running · pid {{ device.app.pid }}</template>
-          <template v-else-if="device.app.error">error: {{ device.app.error }}</template>
-          <template v-else>exited · code {{ device.app.exitCode }}</template>
+    <!-- terminal -->
+    <div class="term" ref="termEl">
+      <div class="term-bar">
+        <span class="term-dots"><i></i><i></i><i></i></span>
+        <span class="term-title">{{ device.app.name ? cmdLine : 'terminal' }}</span>
+        <span class="term-status" v-if="device.app.name" :class="status.cls">
+          <i class="dot"></i>{{ status.text }}
         </span>
       </div>
-      <div class="app-log" ref="logEl">
-        <div
-          v-for="(line, i) in device.app.output" :key="i"
-          class="app-log-line" :class="{ err: line.s === 'err' }"
-        >{{ line.line }}</div>
+      <div class="term-body" ref="logEl">
+        <template v-if="device.app.name">
+          <div class="term-line cmd"><span class="prompt">$</span> {{ cmdLine }}</div>
+          <div
+            v-for="(line, i) in device.app.output" :key="i"
+            class="term-line" :class="{ err: line.s === 'err' }"
+          >{{ line.line }}</div>
+          <div v-if="device.app.error" class="term-line err">✖ {{ device.app.error }}</div>
+          <div v-if="device.app.running" class="term-line"><span class="caret"></span></div>
+          <div v-else-if="!device.app.error" class="term-line exit" :class="{ err: device.app.exitCode !== 0 }">— exited with code {{ device.app.exitCode }} —</div>
+        </template>
+        <template v-else>
+          <div class="term-line muted"># run an example app above — its output appears here</div>
+          <div class="term-line cmd"><span class="prompt">$</span> <span class="caret"></span></div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { device, apiJson, apiGet } from '../../composables/useDevice'
 import { icons } from '../../icons'
 
@@ -76,6 +85,18 @@ const appList = ref([])
 const paramValues = ref({})
 const startError = ref('')
 const logEl = ref(null)
+const termEl = ref(null)
+// args of the run started from this page (server state doesn't carry args)
+const lastArgs = ref([])
+
+const cmdLine = computed(() =>
+  ['python3', `apps/${device.app.name}.py`, ...lastArgs.value].join(' ')
+)
+const status = computed(() => {
+  if (device.app.running) return { cls: 'run', text: `running · pid ${device.app.pid}` }
+  if (device.app.error) return { cls: 'err', text: device.app.error }
+  return { cls: device.app.exitCode === 0 ? 'ok' : 'err', text: `exited · code ${device.app.exitCode}` }
+})
 
 onMounted(async () => {
   const d = await apiGet('/api/_apps')
@@ -108,7 +129,8 @@ async function run(app) {
   startError.value = ''
   const args = buildArgs(app)
   const r = await apiJson('POST', '/api/_apps/start', { name: app.name, args })
-  if (r.status !== 200) startError.value = r.json.error || `Error ${r.status}`
+  if (r.status !== 200) { startError.value = r.json.error || `Error ${r.status}`; return }
+  lastArgs.value = args
 }
 
 async function stop() {
@@ -125,4 +147,9 @@ function maybeScroll() {
 }
 
 watch(() => device.app.output?.length, () => { maybeScroll() })
+
+// bring the terminal into view when a run starts
+watch(() => device.app.running, (running) => {
+  if (running) nextTick(() => termEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+})
 </script>
