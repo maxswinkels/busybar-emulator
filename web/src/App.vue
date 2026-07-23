@@ -22,6 +22,7 @@
         <TabFirmware v-else-if="tab === 'firmware'" />
         <TabDrawTool v-else-if="tab === 'draw-tool'" />
         <TabApps v-else-if="tab === 'apps'" />
+        <TabScenarios v-else-if="tab === 'scenarios'" />
       </main>
     </div>
 
@@ -43,6 +44,7 @@ import TabNetwork from './components/tabs/Network.vue'
 import TabFirmware from './components/tabs/Firmware.vue'
 import TabDrawTool from './components/tabs/DrawTool.vue'
 import TabApps from './components/tabs/Apps.vue'
+import TabScenarios from './components/tabs/Scenarios.vue'
 
 const tab = ref('settings')
 const host = location.host || '127.0.0.1:8080'

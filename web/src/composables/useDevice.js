@@ -6,6 +6,7 @@ export const device = reactive({
   brightness: 80, volume: 60, battery_charge: 0, name: '', uptime: 0,
   log: [], connected: false, frameStamp: performance.now() / 1000, _lastTs: -1,
   app: { running: false, name: null, pid: null, startedAt: null, exitCode: null, error: null, output: [] },
+  scenario: { offline_until: 0, power_state: 'discharging' },
 })
 
 let beepCb = null

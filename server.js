@@ -200,6 +200,28 @@ const state = {
 loadState(state);
 let frameSeq = 1;
 
+/* --------------------------- scenario simulator -------------------------- */
+// Emulator-only fault injection. Ephemeral by design: never persisted.
+const scenario = { offline_until: 0, power_state: "discharging" };
+let offlineTimer = null, stealTimer = null;
+const STEAL_APP = "_scenario.steal";
+function scenarioInfo() {
+  const owns = state.frame.application_name === STEAL_APP && state.frame.elements.length > 0;
+  return {
+    power_state: scenario.power_state,
+    battery_charge: state.battery_charge,
+    offline_until: scenario.offline_until,
+    offline_remaining_ms: Math.max(0, scenario.offline_until - Date.now()),
+    steal: { active: owns, priority: owns ? state.frame.priority : null },
+  };
+}
+// Priority-conflict rule shared by POST /api/display/draw and the steal scenario.
+function drawFrame(appName, elements, priority) {
+  if (state.frame.elements.length && priority < state.frame.priority) return false;
+  state.frame = { application_name: appName, elements, ts: frameSeq++, priority };
+  return true;
+}
+
 /* ------------------------------ SSE clients ------------------------------ */
 const clients = new Set();
 function uptimeStr(s) { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60; return `${String(d).padStart(2, "0")}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(ss).padStart(2, "0")}s`; }
@@ -210,6 +232,7 @@ function snapshot() {
     theme: state.busy_snapshot.snapshot.busy_bar_settings ? state.busy_snapshot.snapshot.busy_bar_settings.theme : null,
     log: state.log.slice(0, 18),
     app: appStatus(),
+    scenario: { offline_until: scenario.offline_until, power_state: scenario.power_state },
   };
 }
 function broadcast() { const data = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`; for (const r of clients) { try { r.write(data); } catch (_) {} } }
@@ -262,6 +285,8 @@ const server = http.createServer(async (req, res) => {
   try { const u = new URL(req.url, "http://localhost"); p = u.pathname; q = Object.fromEntries(u.searchParams); }
   catch (_) { return fail(res, 400, "bad request"); }
   const method = req.method;
+  // scenario: simulated USB/Wi-Fi drop — non-emulator API traffic (incl. preflights) gets a dead socket (ECONNRESET)
+  if (scenario.offline_until > Date.now() && p.startsWith("/api/") && !p.startsWith("/api/_")) { req.socket.destroy(); return; }
   if (method === "OPTIONS") { send(res, 204, {}); return; }
 
   // static + stream (no auth)
@@ -280,7 +305,6 @@ const server = http.createServer(async (req, res) => {
     if (!a) return fail(res, 404, "asset not found");
     res.writeHead(200, Object.assign({ "Content-Type": a.type || "application/octet-stream" }, CORS)); return res.end(a.buf);
   }
-
   // API-version gate (real device: 405 if X-API-Sem-Ver major != 25), version/access/transport exempt
   const sv = req.headers["x-api-sem-ver"];
   if (sv && !/\/api\/(version|access|transport)/.test(p)) {
@@ -302,9 +326,7 @@ const server = http.createServer(async (req, res) => {
       if (elements.length > 100) return fail(res, 400, "Elements number limit exceeded");
       let priority = b.priority == null ? 50 : b.priority;
       if (typeof priority !== "number" || priority < 1 || priority > 100) return fail(res, 400, "Bad request: priority 1-100");
-      const cur = state.frame.elements.length ? state.frame.priority : 0;
-      if (state.frame.elements.length && priority < cur) return fail(res, 409, "Not drawn due to low priority");
-      state.frame = { application_name: appName, elements, ts: frameSeq++, priority };
+      if (!drawFrame(appName, elements, priority)) return fail(res, 409, "Not drawn due to low priority");
       if (b.led_notification_color) emit("led", { color: b.led_notification_color });
       logCall("POST", p, `${appName} · ${elements.length} el · pri ${priority}`); broadcast(); return ok(res);
     }
@@ -408,7 +430,10 @@ const server = http.createServer(async (req, res) => {
         device: { serial_number: "EMU00000000", usb_mac: "02:00:00:00:00:01", otp_valid: true, firmware_security: "none" },
         firmware: { version: "emulator-1.1.0", target: "emu", branch: "dev", build_date: "2026-07-22", commit_hash: "emulator", api_semver: API_SEMVER },
         system: { api_semver: API_SEMVER, uptime: uptimeStr(up), boot_time: Math.floor(state.startTime / 1000), auto_update_enabled: false },
-        power: { state: "discharging", battery_charge: state.battery_charge, battery_voltage: 4.01, battery_current: -0.12, usb_voltage: 0 },
+        power: { state: scenario.power_state, battery_charge: state.battery_charge,
+          battery_voltage: +(3.5 + state.battery_charge * 0.007).toFixed(2),
+          battery_current: scenario.power_state === "charging" ? 0.35 : scenario.power_state === "charged" ? 0 : -0.12,
+          usb_voltage: scenario.power_state === "discharging" ? 0 : 5 },
       };
       const sub = p.slice("/api/status/".length);
       logCall("GET", p);
@@ -453,6 +478,63 @@ const server = http.createServer(async (req, res) => {
       logCall("POST", p, "stop");
       const stopped = await new Promise((resolve) => { appOpChain = appOpChain.then(async () => { resolve(await stopApp()); }); });
       return ok(res, { stopped });
+    }
+
+    /* ---- emulator: scenario simulator ---- */
+    if (p === "/api/_scenario" && method === "GET") { return send(res, 200, scenarioInfo()); }
+    if (p === "/api/_scenario/power" && method === "POST") {
+      const b = await readJson(req);
+      if (b.battery_charge === undefined && b.state === undefined) return fail(res, 400, "Bad request: battery_charge or state required");
+      if (b.battery_charge !== undefined) {
+        const n = Number(b.battery_charge);
+        if (!Number.isFinite(n) || n < 0 || n > 100) return fail(res, 400, "Bad request: battery_charge 0-100");
+        state.battery_charge = Math.round(n);
+      }
+      if (b.state !== undefined) {
+        if (!["charging", "discharging", "charged"].includes(b.state)) return fail(res, 400, "Bad request: state charging|discharging|charged");
+        scenario.power_state = b.state;
+      }
+      logCall("POST", p, `${scenario.power_state} · ${state.battery_charge}%`); broadcast(); return ok(res);
+    }
+    if (p === "/api/_scenario/offline" && method === "POST") {
+      if (scenario.offline_until > Date.now()) {
+        clearTimeout(offlineTimer); offlineTimer = null; scenario.offline_until = 0;
+        logCall("POST", p, "restored"); broadcast(); return ok(res, { offline_until: 0 });
+      }
+      const b = await readJson(req);
+      const n = Number(b.duration_ms);
+      if (!Number.isFinite(n) || n < 100 || n > 600000) return fail(res, 400, "Bad request: duration_ms 100-600000");
+      scenario.offline_until = Date.now() + n;
+      offlineTimer = setTimeout(() => { offlineTimer = null; scenario.offline_until = 0; broadcast(); }, n);
+      logCall("POST", p, `offline ${n}ms`); broadcast(); return ok(res, { offline_until: scenario.offline_until });
+    }
+    if (p === "/api/_scenario/steal" && method === "POST") {
+      const b = await readJson(req);
+      let priority = b.priority == null ? 99 : b.priority;
+      if (typeof priority !== "number" || priority < 1 || priority > 100) return fail(res, 400, "Bad request: priority 1-100");
+      let duration = null;
+      if (b.duration_ms != null) {
+        const n = Number(b.duration_ms);
+        if (!Number.isFinite(n) || n < 100 || n > 600000) return fail(res, 400, "Bad request: duration_ms 100-600000");
+        duration = n;
+      }
+      const elements = [
+        { id: "s1", type: "rectangle", x: 0, y: 0, width: 72, height: 16, border_width: 1, border_color: "0xFF3C3CFF", fill: "none", display: "front" },
+        { id: "s2", type: "text", text: `PRIORITY ${priority}`, x: 36, y: 8, font: "small", color: "0xFF3C3CFF", align: "center", display: "front" },
+      ];
+      if (!drawFrame(STEAL_APP, elements, priority)) return fail(res, 409, "Not drawn due to low priority");
+      clearTimeout(stealTimer); stealTimer = null;
+      if (duration != null) {
+        stealTimer = setTimeout(() => { stealTimer = null; if (state.frame.application_name === STEAL_APP) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; broadcast(); } }, duration);
+      }
+      logCall("POST", p, `pri ${priority}${duration ? ` · ${duration}ms` : ""}`); broadcast(); return ok(res, { priority });
+    }
+    if (p === "/api/_scenario/reset" && method === "POST") {
+      clearTimeout(offlineTimer); offlineTimer = null; scenario.offline_until = 0;
+      clearTimeout(stealTimer); stealTimer = null;
+      if (state.frame.application_name === STEAL_APP) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; }
+      scenario.power_state = "discharging"; state.battery_charge = 100;
+      logCall("POST", p, "reset"); broadcast(); return ok(res);
     }
 
     fail(res, 404, `no route for ${method} ${p}`);

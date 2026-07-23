@@ -23,4 +23,5 @@ export const icons = {
   usb: s('<circle cx="12" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M12 20V6M12 6l-2.2 3M12 6l2.2 3M12 13l-4-2.2v-2M12 11l4-2.2V6.5"/>'),
   battery: s('<rect x="2" y="8" width="17" height="9" rx="2"/><path d="M21 11v3"/><rect x="4" y="10" width="11" height="5" rx="1" fill="currentColor" stroke="none"/>'),
   play: s('<polygon points="5,3 19,12 5,21" fill="currentColor" stroke="none"/>'),
+  flask: s('<path d="M9.5 3h5M10 3v5.2L4.8 17.6a2 2 0 001.8 2.9h10.8a2 2 0 001.8-2.9L14 8.2V3M7.2 14.5h9.6"/>'),
 }

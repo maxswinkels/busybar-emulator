@@ -102,6 +102,11 @@ curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/js
 | `GET /api/_apps` | *(emulator)* list runnable example apps + current app state/output |
 | `POST /api/_apps/start` | *(emulator)* `{name, args?}`, spawn an app (stops any running app first) |
 | `POST /api/_apps/stop` | *(emulator)* stop the running app → `{stopped:bool}` |
+| `GET /api/_scenario` | *(emulator)* scenario state: power override, offline window, steal ownership |
+| `POST /api/_scenario/power` | *(emulator)* `{battery_charge?, state?}` set battery % / charging state (shown in `/api/status/power`) |
+| `POST /api/_scenario/offline` | *(emulator)* `{duration_ms}` reset all non-emulator `/api/*` connections for the window; call again to restore early |
+| `POST /api/_scenario/steal` | *(emulator)* `{priority?=99, duration_ms?}` draw a high-priority frame so lower-priority draws get 409 |
+| `POST /api/_scenario/reset` | *(emulator)* clear all scenario overrides |
 
 ```jsonc
 // text: colour 0xRRGGBBAA (default 0xFFFFFFFF)
@@ -148,7 +153,7 @@ Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and as
 
 - **Rendering is a faithful approximation.** Assets decode in the browser (1 image pixel = 1 LED), the front display applies gamma 0.35, and the back OLED is grayscale. `busy_tiny` is bitmap-only and falls back to `busy_regular_5px`.
 - **Priority/409 is softened.** Draws are rejected only when strictly lower than the current owner's priority. The real device may also defer conflicting requests for up to 1.5 s.
-- **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, and `/api/_apps*` (app runner) are emulator conveniences.
+- **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, `/api/_apps*` (app runner) and `/api/_scenario*` (scenario simulator) are emulator conveniences.
 
 </details>
 
@@ -159,7 +164,7 @@ The goal is the fastest way to build, test and show off BUSY Bar apps, with or w
 **Playground &amp; testing**
 
 - [ ] **API console**: a request builder for every `/api/*` endpoint, with live responses and replay (the draw tool, generalized)
-- [ ] **Scenario simulator**: trigger the conditions apps must handle, like low battery, USB/Wi-Fi drop, button presses, and a higher-priority app stealing the screen (so you can test your 409 handling)
+- [x] **Scenario simulator**: trigger the conditions apps must handle, like low battery, USB/Wi-Fi drop, button presses, and a higher-priority app stealing the screen (so you can test your 409 handling)
 - [ ] **Multi-app sandbox**: run several apps at once and watch priority decide who owns the screen
 - [ ] **Record &amp; replay**: capture an app's calls and scrub the timeline to debug animation timing
 
