@@ -10,6 +10,10 @@ All assets listed below are sourced from the open-source firmware repository htt
 
 **`public/brand/`** and **`.github/logo.svg`**: BUSY logo, app icon and device render (busybar-device.png illustration used in the web UI; favicon used as the repository logo). Licensed under CC-BY 4.0 (attribution required).
 
+## Sounds (CC-BY-SA 4.0)
+
+**`public/sounds/*.wav`**: The three stock device sounds (calendar_event_starts, calendar_reminder_ends, volume_change) from the firmware's `assets/shared/sounds/`. Copyright © 2024-2026 Flipper FZCO, licensed under CC-BY-SA 4.0 (per the firmware's `REUSE.toml`).
+
 ## Fonts (SIL OFL 1.1)
 
 **`public/fonts/*.ttf`**: Pixel and proportional typefaces:

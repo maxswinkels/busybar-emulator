@@ -66,6 +66,8 @@ const APP_PARAMS = {
   "busy_status.py": [{ key: "theme", label: "Theme", type: "select", positional: true, default: "on_air",
     options: ["keep_out","dnd","meeting","on_call","lunch","back_soon","booked","flow","chill_time","on_air","coding","low_social_battery"] }],
   "ping_monitor.py": [{ key: "target", label: "Target", type: "text", flag: "--target", placeholder: "8.8.8.8" }],
+  "sound_test.py": [{ key: "sound", label: "Sound", type: "select", positional: true, default: "all",
+    options: ["all", ...Object.keys(SOUNDS).sort()] }],
 };
 
 function scanApps() {
@@ -272,6 +274,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (method === "GET" && (p.startsWith("/public/") || p.startsWith("/animations/"))) return serveStatic(res, staticPath(PUBLIC, p.replace(/^\/public\//, "").replace(/^\//, "")));
   if (method === "GET" && p === "/api/_animations") return send(res, 200, ANIMATIONS);
+  if (method === "GET" && p === "/api/_sounds") return send(res, 200, SOUNDS);
   if (method === "GET" && p.startsWith("/assets/")) {
     const a = state.assets[decodeURIComponent(p.slice("/assets/".length))];
     if (!a) return fail(res, 404, "asset not found");
@@ -330,7 +333,8 @@ const server = http.createServer(async (req, res) => {
       if (!b.path && !b.stock_path) return fail(res, 400, "Missing path or stock_path");
       logCall("POST", p, b.stock_path || b.path || "");
       let url = null;
-      if (b.stock_path) { const key = b.stock_path in SOUNDS ? b.stock_path : path.basename(b.stock_path); if (SOUNDS[key]) url = "/public/sounds/" + SOUNDS[key]; }
+      // firmware resolves the basename after the last "/" incl. extension; also accept the bare name (emulator-only)
+      if (b.stock_path) { const base = path.basename(b.stock_path); for (const k of [b.stock_path, base, base.replace(/\.(wav|mp3|ogg)$/i, "")]) if (SOUNDS[k]) { url = "/public/sounds/" + SOUNDS[k]; break; } }
       if (!url && b.path) { if (state.assets[b.path]) url = "/assets/" + b.path; else if (state.storage[b.path]) url = "/api/storage/read?path=" + encodeURIComponent(b.path); }
       // firmware 404s an unplayable file; no stock sounds are bundled, so unresolved paths 200 + beep fallback (emulator-only)
       emit("beep", { url, path: b.path || null, stock_path: b.stock_path || null }); return ok(res);

@@ -50,6 +50,7 @@ Then drive it like the real device:
 python3 apps/clock.py              # big clock in the real device font
 python3 apps/busy_status.py coding # plays the real "coding" theme animation
 python3 apps/weather.py            # uploads an icon asset + draws a temperature
+python3 apps/sound_test.py         # plays every stock sound in order (emulator lists them automatically)
 ```
 
 > [!TIP]
@@ -97,6 +98,7 @@ curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/js
 | `GET /api/version` → `{"api_semver":"25.0.0"}` · `GET /api/transport` · `GET/POST /api/access` | Meta |
 | `POST /api/input?key=` · `POST /api/log_dump` | Buttons / logs |
 | `GET /api/_animations` | *(emulator)* imported-animation manifest with `fps`/`sections` |
+| `GET /api/_sounds` | *(emulator)* stock-sound manifest `{name: filename}` (used by `sound_test.py`) |
 | `GET /api/_apps` | *(emulator)* list runnable example apps + current app state/output |
 | `POST /api/_apps/start` | *(emulator)* `{name, args?}`, spawn an app (stops any running app first) |
 | `POST /api/_apps/stop` | *(emulator)* stop the running app → `{stopped:bool}` |
