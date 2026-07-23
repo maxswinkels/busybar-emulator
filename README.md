@@ -76,6 +76,13 @@ Built something cool? Share it in the [community gallery](https://maxswinkels.gi
 
 Edit text, rectangles and stock icons right on the 72×16 canvas, with the same fonts and pixels as the device screen, pushed live to the bar in real time.
 
+## Capture
+
+The display panel has two export buttons that produce the files busybar-apps expects in an app folder:
+
+- **PNG** — saves `preview.png` at 720×160 (72×16 LEDs × 10 px) in one click.
+- **GIF** — records `preview.gif` at 20 fps for up to 30 s; click once to start, again to stop and download. Encoding is client-side (no server involved).
+
 ## The API
 
 Success responses are `{"result":"OK"}` and errors are `{"error","code"}`. Auth mirrors the device: `X-API-Token` is only enforced for non-localhost callers when `BUSY_API_TOKEN` is set. Localhost is always allowed.

@@ -53,6 +53,14 @@ button{font-family:inherit}
    (img 385px → screen 360px wide, centre + 8.5px down = 56.85% of height) */
 .busybar canvas.matrix{position:absolute;left:50%;top:56.85%;transform:translate(-50%,-50%);width:93.5%;height:auto;image-rendering:pixelated;border-radius:2px}
 .backrow{display:flex;justify-content:center;margin-top:12px}
+.capture-row{display:flex;gap:8px;margin-top:14px}
+.cap-btn{display:flex;align-items:center;gap:6px;border:none;cursor:pointer;background:var(--btn);color:var(--muted);font:inherit;font-size:12px;font-weight:600;letter-spacing:.04em;padding:5px 12px;border-radius:999px;transition:.15s}
+.cap-btn:hover{background:var(--btn-hover);color:var(--text)}
+.cap-btn:disabled{opacity:.6;cursor:default}
+.cap-ico svg{width:14px;height:14px;display:block}
+.cap-btn.rec{color:#ff5252}
+@keyframes rec-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.cap-btn.rec .cap-ico{animation:rec-pulse 1.2s infinite}
 .oled-frame{background:#050506;border:1px solid #26282c;border-radius:8px;padding:6px}
 canvas.oled{display:block;width:168px;height:84px;image-rendering:pixelated;border-radius:3px}
 
