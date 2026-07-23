@@ -143,6 +143,29 @@ function stopApp() {
   });
 }
 
+/* ---------------------------- persistence -------------------------------- */
+const DATA_DIR = path.join(__dirname, ".data");
+const STATE_FILE = path.join(DATA_DIR, "state.json");
+let _saveTimer = null;
+function saveState() {
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    const stor = {}; for (const [k, v] of Object.entries(state.storage)) stor[k] = { type: v.type, b64: v.data ? v.data.toString("base64") : null };
+    const ass = {}; for (const [k, v] of Object.entries(state.assets)) ass[k] = { b64: v.buf.toString("base64"), type: v.type };
+    const json = JSON.stringify({ storage: stor, assets: ass });
+    try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); const tmp = STATE_FILE + ".tmp"; fs.writeFileSync(tmp, json); fs.renameSync(tmp, STATE_FILE); } catch (e) { console.warn("[persist] save failed:", e.message); }
+  }, 500);
+}
+function loadState(st) {
+  try {
+    if (!fs.existsSync(STATE_FILE)) return;
+    const { storage, assets } = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    if (storage) for (const [k, v] of Object.entries(storage)) st.storage[k] = { type: v.type, data: v.b64 ? Buffer.from(v.b64, "base64") : null };
+    if (assets) for (const [k, v] of Object.entries(assets)) st.assets[k] = { buf: Buffer.from(v.b64, "base64"), type: v.type };
+  } catch (e) { console.warn("[persist] could not load state.json, starting empty:", e.message); }
+}
+
 /* ------------------------------ device state ----------------------------- */
 const BAR_SETTINGS = { theme: "busy", show_work_phase_only: false, trigger_smart_home: true };
 const state = {
@@ -161,6 +184,7 @@ const state = {
   storage: {},
   log: [],
 };
+loadState(state);
 let frameSeq = 1;
 
 /* ------------------------------ SSE clients ------------------------------ */
@@ -304,22 +328,22 @@ const server = http.createServer(async (req, res) => {
       if (ct.includes("application/json")) { const b = await readJson(req); buf = Buffer.from(b.data || "", "base64"); }
       else buf = await readBody(req);
       state.assets[`${app}/${file}`] = { buf, type: "image/png" };
-      logCall("POST", p, `${app}/${file} · ${buf.length}b`); return ok(res);
+      saveState(); logCall("POST", p, `${app}/${file} · ${buf.length}b`); return ok(res);
     }
     if (p === "/api/assets/upload" && method === "DELETE") {
       const app = q.application_name; if (!app) return fail(res, 400, "application_name required");
       let n = 0; for (const k of Object.keys(state.assets)) if (k.startsWith(app + "/")) { delete state.assets[k]; n++; }
       if (!n) return fail(res, 404, "Assets not found");
-      logCall("DELETE", p, app); return ok(res);
+      saveState(); logCall("DELETE", p, app); return ok(res);
     }
 
     /* ---- storage (?path=, raw bodies) ---- */
-    if (p === "/api/storage/write" && method === "POST") { if (!q.path) return fail(res, 400, "path required"); state.storage[q.path] = { type: "file", data: await readBody(req) }; logCall("POST", p, q.path); return ok(res); }
+    if (p === "/api/storage/write" && method === "POST") { if (!q.path) return fail(res, 400, "path required"); state.storage[q.path] = { type: "file", data: await readBody(req) }; saveState(); logCall("POST", p, q.path); return ok(res); }
     if (p === "/api/storage/read" && method === "GET") { const f = state.storage[q.path]; if (!f) return fail(res, 400, "not found"); logCall("GET", p, q.path); return send(res, 200, Buffer.isBuffer(f.data) ? f.data : Buffer.from(String(f.data || ""))); }
     if (p === "/api/storage/list" && method === "GET") { const pre = q.path || ""; const items = Object.keys(state.storage).filter((k) => k.startsWith(pre)).map((k) => ({ type: state.storage[k].type || "file", name: k, size: state.storage[k].data ? state.storage[k].data.length : 0 })); logCall("GET", p, pre); return send(res, 200, { list: items }); }
-    if (p === "/api/storage/remove" && method === "DELETE") { delete state.storage[q.path]; logCall("DELETE", p, q.path); return ok(res); }
-    if (p === "/api/storage/mkdir" && method === "POST") { state.storage[q.path] = { type: "dir", data: null }; logCall("POST", p, q.path); return ok(res); }
-    if (p === "/api/storage/rename" && method === "POST") { if (state.storage[q.path]) { state.storage[q.new_path] = state.storage[q.path]; delete state.storage[q.path]; } logCall("POST", p, `${q.path}→${q.new_path}`); return ok(res); }
+    if (p === "/api/storage/remove" && method === "DELETE") { delete state.storage[q.path]; saveState(); logCall("DELETE", p, q.path); return ok(res); }
+    if (p === "/api/storage/mkdir" && method === "POST") { state.storage[q.path] = { type: "dir", data: null }; saveState(); logCall("POST", p, q.path); return ok(res); }
+    if (p === "/api/storage/rename" && method === "POST") { if (state.storage[q.path]) { state.storage[q.new_path] = state.storage[q.path]; delete state.storage[q.path]; } saveState(); logCall("POST", p, `${q.path}→${q.new_path}`); return ok(res); }
     if (p === "/api/storage/status" && method === "GET") { return send(res, 200, { used_bytes: 1048576, free_bytes: 15728640, total_bytes: 16777216 }); }
 
     /* ---- busy timer ---- */

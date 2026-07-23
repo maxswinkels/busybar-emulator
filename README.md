@@ -172,7 +172,7 @@ The goal is the fastest way to build, test and show off BUSY Bar apps, with or w
 - [ ] **Published clients**: the Python client on PyPI and a TypeScript client on npm, mirroring the official libraries
 - [ ] **`npx busybar-emulator`**: run with no build step, plus a Docker image
 - [ ] **App templates**: `create-busybar-app` starters (clock, status, monitor)
-- [ ] **Persistent state**: storage and uploaded assets survive restarts
+- [x] **Persistent state**: storage and uploaded assets survive restarts
 
 **Content creation**
 
