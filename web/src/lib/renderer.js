@@ -26,7 +26,9 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
   const buf = new Float32Array(W * H * 3);
   const off = document.createElement("canvas"); off.width = cv.width; off.height = cv.height;
   (function () { const o = off.getContext("2d"); o.fillStyle = "#080809"; o.fillRect(0, 0, off.width, off.height); o.fillStyle = "rgba(255,255,255,0.028)"; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) o.fillRect((x + 0.5) * PITCH - HS, (y + 0.5) * PITCH - HS, SQ, SQ); })();
-  const GAMMA_LUT = (() => { const g = 1 / 0.35, lut = new Float32Array(256); for (let i = 0; i < 256; i++) lut[i] = 255 * Math.pow(i / 255, g); return lut; })();
+  // gamma 0.35 with a small linear leak: pure pow() crushes dim gradient shades
+  // to 0, which then rendered as flat grey via the cell boost below
+  const GAMMA_LUT = (() => { const g = 1 / 0.35, lut = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 255; lut[i] = 255 * (Math.pow(x, g) + 0.08 * x) / 1.08; } return lut; })();
 
   let clip = null;
   function px(x, y, r, g, b) { x |= 0; y |= 0; if (x < 0 || x >= W || y < 0 || y >= H) return; if (clip && (x < clip[0] || x > clip[1])) return; const i = (y * W + x) * 3; buf[i] = r; buf[i + 1] = g; buf[i + 2] = b; }
@@ -45,7 +47,8 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
       const gr = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, PITCH * 0.72);
       gr.addColorStop(0, `rgba(${r | 0},${g | 0},${b | 0},0.42)`); gr.addColorStop(1, `rgba(${r | 0},${g | 0},${b | 0},0)`);
       ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cxp, cyp, PITCH * 0.72, 0, 7); ctx.fill();
-      ctx.fillStyle = `rgb(${Math.min(255, r + 30) | 0},${Math.min(255, g + 30) | 0},${Math.min(255, b + 30) | 0})`; ctx.fillRect(cxp - HS, cyp - HS, SQ, SQ);
+      const k = 30 * Math.max(r, g, b) / 255;   // white-hot boost scales with intensity so dim pixels keep their hue
+      ctx.fillStyle = `rgb(${Math.min(255, r + k) | 0},${Math.min(255, g + k) | 0},${Math.min(255, b + k) | 0})`; ctx.fillRect(cxp - HS, cyp - HS, SQ, SQ);
     }
     ctx.globalCompositeOperation = "source-over";
   }
