@@ -52,6 +52,7 @@ python3 apps/busy_status.py coding # plays the real "coding" theme animation
 python3 apps/weather.py            # uploads an icon asset + draws a temperature
 python3 apps/sound_test.py         # plays every stock sound in order (emulator lists them automatically)
 python3 apps/pixel_fire.py         # demoscene fire on the LEDs (also: rain, plasma)
+python3 apps/mac_monitor.py        # CPU / RAM / network bars from your Mac
 ```
 
 > [!TIP]
