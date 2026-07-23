@@ -5,15 +5,18 @@
       <p class="muted-note" style="margin-top:-6px;margin-bottom:14px">Drag elements on the 72×16 grid: it's the real LED matrix (same fonts &amp; pixels as the screen above) and pushes to the bar live. Same output as <code>POST /api/display/draw</code> (app <code>draw_tool</code>).</p>
 
       <div class="editor-wrap">
-        <div class="toolbar">
+        <div class="toolbar" style="position:relative">
           <button class="pill" @click="addText"><span v-html="icons.text"></span>Text</button>
           <button class="pill" @click="addRect"><span v-html="icons.square"></span>Rect</button>
-          <button class="pill" @click="addImage"><span v-html="icons.image"></span>Icon</button>
-          <select class="select" style="min-width:0;width:auto" v-model="pickStock">
-            <optgroup v-for="(list,cat) in iconCats" :key="cat" :label="cat">
-              <option v-for="ic in list" :key="ic.id" :value="ic.key">{{ ic.name }}</option>
-            </optgroup>
-          </select>
+          <button class="pill" :class="{ active: iconPopOpen }" @pointerdown.stop @click="iconPopOpen=!iconPopOpen"><span v-html="icons.image"></span>Icon</button>
+          <div v-if="iconPopOpen" class="icon-pop" ref="iconPop">
+            <div class="icon-tabs">
+              <button v-for="cat in iconPopCats" :key="cat" class="icon-tab" :class="{ active: cat===iconPopCat }" @click="iconPopCat=cat">{{ CAT_LABELS[cat] || (cat.charAt(0).toUpperCase()+cat.slice(1)) }}</button>
+            </div>
+            <div class="icon-grid">
+              <img v-for="ic in iconCats[iconPopCat]" :key="ic.key" :src="ic.url" :title="ic.name" class="icon-cell" @click="pickIcon(ic.key)" />
+            </div>
+          </div>
           <div style="flex:1"></div>
           <button class="pill" @click="clearAll">Clear</button>
         </div>
@@ -61,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { apiJson, api, apiGet } from '../../composables/useDevice'
 import { loadAtlas, rasterize } from '../../lib/atlas'
 import { icons } from '../../icons'
@@ -69,6 +72,7 @@ import { toJson, toCurl, toPython } from '../../lib/exporters'
 
 const W = 72, H = 16, cell = 13
 const FONTS = ['tiny', 'small', 'normal', 'condensed', 'bold', 'large', 'extra_large', 'global']
+const CAT_LABELS = { faces: 'Smiles & Emotions', food: 'Food & Drinks', nature: 'Nature', work: 'Work & Study', sport: 'Sports', hearts: 'Hearts & Sparks' }
 
 const cv = ref(null)
 let ctx = null
@@ -78,15 +82,24 @@ const sel = computed(() => shapes.find(s => s.id === selId.value))
 let seq = 0
 const status = ref(''), statusCls = ref('status-line')
 
-/* icons */
-const iconCats = ref({}); const iconPx = {}; const pickStock = ref('faces/emoji-grinning')
+/* icon popover */
+const iconCats = ref({}); const iconPx = {}
+const iconPopOpen = ref(false); const iconPopCat = ref(''); const iconPop = ref(null)
+const iconPopCats = computed(() => Object.keys(iconCats.value))
+
+function pickIcon(key) { iconPopOpen.value = false; const s = { id: 'e' + (++seq), type: 'image', x: 1, y: 1, stock: key }; shapes.push(s); selId.value = s.id; loadIcon(key) }
+
+function onDocDown(e) { if (iconPopOpen.value && iconPop.value && !iconPop.value.contains(e.target)) iconPopOpen.value = false }
+function onDocKey(e) { if (e.key === 'Escape') iconPopOpen.value = false }
 onMounted(async () => {
   ctx = cv.value.getContext('2d')
   await loadAtlas(); paint()
   const cats = await apiGet('/public/icons.json'); const out = {}
   for (const cat in cats) out[cat] = cats[cat].map(ic => ({ id: ic.id, name: ic.fileName.replace(/\.svg$/, ''), key: cat + '/' + ic.fileName.replace(/\.svg$/, ''), url: '/public/icons/' + ic.path.replace(/^draw_tool\//, '') }))
-  iconCats.value = out; paint()
+  iconCats.value = out; if (iconPopCats.value.length) iconPopCat.value = iconPopCats.value[0]; paint()
+  document.addEventListener('pointerdown', onDocDown); document.addEventListener('keydown', onDocKey)
 })
+onBeforeUnmount(() => { document.removeEventListener('pointerdown', onDocDown); document.removeEventListener('keydown', onDocKey) })
 function iconUrl(key) { for (const cat in iconCats.value) { const f = iconCats.value[cat].find(i => i.key === key); if (f) return f.url } return null }
 function loadIcon(key) {
   if (iconPx[key]) return iconPx[key]
@@ -150,7 +163,6 @@ function onUp() { drag = null; window.removeEventListener('pointermove', onMove)
 /* shapes */
 function addText() { const s = { id: 'e' + (++seq), type: 'text', x: 2, y: 4, text: 'TEXT', font: 'normal', color: '#2B7FFF' }; shapes.push(s); selId.value = s.id }
 function addRect() { const s = { id: 'e' + (++seq), type: 'rect', x: 4, y: 4, w: 20, h: 8, fill: 'solid', color: '#FF7A29' }; shapes.push(s); selId.value = s.id }
-function addImage() { const s = { id: 'e' + (++seq), type: 'image', x: 1, y: 1, stock: pickStock.value }; shapes.push(s); selId.value = s.id; loadIcon(s.stock) }
 function remove(id) { const i = shapes.findIndex(s => s.id === id); if (i >= 0) shapes.splice(i, 1); if (selId.value === id) selId.value = null }
 function clearAll() { shapes.splice(0); selId.value = null; api('DELETE', '/api/display/draw'); status.value = 'cleared'; statusCls.value = 'status-line' }
 

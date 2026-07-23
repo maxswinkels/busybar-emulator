@@ -142,6 +142,17 @@ textarea:focus{outline:none;box-shadow:0 0 0 2px var(--brand)}
 .layer.sel{box-shadow:inset 0 0 0 1.5px var(--brand)}
 .layer .x{cursor:pointer;color:var(--muted);border:none;background:none;font-size:15px}
 
+/* icon picker popover */
+.pill.active{background:var(--btn-hover);box-shadow:inset 0 0 0 1.5px var(--brand)}
+.icon-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:var(--card);border-radius:16px;box-shadow:inset 0 1px 1px 0 var(--ring-in),0 0 0 1px var(--ring-out),0 12px 32px -8px rgba(0,0,0,.45);padding:10px;display:flex;flex-direction:column;gap:8px;min-width:320px}
+.icon-tabs{display:flex;gap:4px;flex-wrap:wrap}
+.icon-tab{cursor:pointer;border:none;background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:500;padding:5px 10px;border-radius:999px;transition:.12s}
+.icon-tab:hover{color:var(--text);background:var(--btn)}
+.icon-tab.active{color:var(--text);background:var(--elevated);box-shadow:inset 0 0 0 1px var(--ring-out)}
+.icon-grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;max-height:160px;overflow-y:auto;padding:2px}
+.icon-cell{width:28px;height:28px;object-fit:contain;border-radius:6px;padding:4px;cursor:pointer;transition:.12s;background:none}
+.icon-cell:hover{background:var(--btn-hover)}
+
 /* apps tab */
 .apps-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
 .app-row{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;background:var(--elevated);border:1px solid transparent;transition:.15s}
