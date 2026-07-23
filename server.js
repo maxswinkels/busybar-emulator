@@ -484,6 +484,10 @@ const server = http.createServer(async (req, res) => {
         pid = await new Promise((resolve, reject) => {
           appOpChain = appOpChain.then(async () => {
             await stopApp();
+            // Launcher-only: Run means "put this app on screen now", so release the
+            // display first (same as a bare DELETE /api/display/draw). The draw API's
+            // arbitration itself stays firmware-faithful for apps run outside the UI.
+            if (state.frame.elements.length) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; broadcast(); }
             try { resolve(await startApp(entry, userArgs)); } catch (e) { reject(e); }
           });
         });
