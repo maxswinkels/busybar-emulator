@@ -8,9 +8,25 @@
           title="Release the display (DELETE /api/display/draw)"
           @click="clearDisplay">Clear display</button>
       </h2>
+      <div v-if="appList.length" class="app-search">
+        <span class="app-search-ic" v-html="icons.search"></span>
+        <input
+          type="text"
+          v-model="search"
+          placeholder="Filter apps by name or description…"
+          aria-label="Filter apps"
+        />
+        <button
+          v-if="search"
+          class="app-search-clear"
+          title="Clear filter"
+          aria-label="Clear filter"
+          @click="search = ''"
+        >×</button>
+      </div>
       <div class="apps-list">
         <div
-          v-for="app in appList" :key="app.name"
+          v-for="app in filteredApps" :key="app.name"
           class="app-row" :class="{ running: device.app.name === app.name && device.app.running }"
         >
           <div class="app-row-info">
@@ -49,7 +65,9 @@
             </button>
           </div>
         </div>
-        <div v-if="!appList.length" class="muted-note" style="padding:8px 0">No apps found.</div>
+        <div v-if="!filteredApps.length" class="muted-note" style="padding:8px 0">
+          {{ appList.length ? `No apps match “${search.trim()}”.` : 'No apps found.' }}
+        </div>
       </div>
       <div v-if="startError" class="status-line err" style="margin-top:10px">{{ startError }}</div>
     </div>
@@ -89,8 +107,25 @@ import { device, api, apiJson, apiGet } from '../../composables/useDevice'
 import { icons } from '../../icons'
 
 const appList = ref([])
+const search = ref('')
 // flat map: "appname.paramkey" -> current value
 const paramValues = ref({})
+
+// Filter by short name, full name (incl. local/ prefix), description, or the
+// "local" tag — case-insensitive, all whitespace-trimmed.
+const filteredApps = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return appList.value
+  return appList.value.filter((app) => {
+    const hay = [
+      app.name,
+      app.name.split('/').pop(),
+      app.description,
+      app.local ? 'local' : '',
+    ].join(' ').toLowerCase()
+    return hay.includes(q)
+  })
+})
 const startError = ref('')
 const logEl = ref(null)
 const termEl = ref(null)

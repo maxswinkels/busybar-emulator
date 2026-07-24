@@ -15,6 +15,7 @@ export const icons = {
   plus: s('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>', 2),
   clock: s('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   list: s('<path d="M4 7h16M4 12h16M4 17h10"/>'),
+  search: s('<circle cx="11" cy="11" r="7"/><path d="M20.5 20.5 16 16"/>'),
   text: s('<path d="M4 6h16M4 6v-.5M9 6v13M15 6v13"/>'),
   square: s('<rect x="4" y="6" width="16" height="12" rx="2"/>'),
   image: s('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5-6 6"/>'),
