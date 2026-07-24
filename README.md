@@ -32,7 +32,7 @@
 ## Why
 
 - **The hardware isn't here yet.** The BUSY Bar sells out fast, so this lets you build and test apps right now instead of waiting.
-- **BUSY Bar apps are just HTTP calls.** The device exposes a clean REST API. An app you write against the emulator runs unchanged on the real hardware. Just swap the host.
+- **BUSY Bar apps are just HTTP calls.** Apps target the device's REST API; the emulator implements that same API, so an app you build here runs unchanged on the real hardware. Just swap the host.
 - **What works here works there.** Fonts, animations, gamma, priority and conflict resolution all match the firmware, so there are no surprises when you move to a real bar.
 
 ## Quick start
