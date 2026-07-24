@@ -73,25 +73,44 @@ const APP_PARAMS = {
 };
 
 function scanApps() {
-  const scan = (dir, prefix = "") => {
-    let files = [];
-    try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".py") && f !== "busybar.py" && !f.startsWith("_")); } catch (_) { return []; }
-    return files.map((file) => {
-      let description = file.replace(".py", "");
-      try {
-        const head = fs.readFileSync(path.join(dir, file), "utf8").slice(0, 2048);
-        const m = head.match(/"""[\s\n]*([^\n"]+)/);
-        if (m) description = m[1].trim();
-      } catch (_) {}
-      const name = prefix ? `${prefix}/${file.replace(".py", "")}` : file.replace(".py", "");
-      const entry = { name, file: prefix ? `${prefix}/${file}` : file, description, params: APP_PARAMS[file] || [] };
-      if (prefix) entry.local = true;
-      return entry;
-    });
+  const isApp = (f) => f.endsWith(".py") && f !== "busybar.py" && !f.startsWith("_");
+  const describe = (fullPath, fallback) => {
+    try {
+      const head = fs.readFileSync(fullPath, "utf8").slice(0, 2048);
+      const m = head.match(/"""[\s\n]*([^\n"]+)/);
+      if (m) return m[1].trim();
+    } catch (_) {}
+    return fallback;
   };
-  const topLevel = scan(APPS_DIR);
-  const local = scan(path.join(APPS_DIR, "local"), "local");
-  return topLevel.concat(local);
+  // rel is the path under apps/ used to spawn the script; slug (its basename or
+  // folder name) is the display name and the APP_PARAMS key.
+  const make = (rel, slug, script, prefix) => {
+    const entry = { name: prefix ? `${prefix}/${slug}` : slug, file: rel,
+      description: describe(path.join(APPS_DIR, rel), slug), params: APP_PARAMS[script] || [] };
+    if (prefix) entry.local = true;
+    return entry;
+  };
+  const scan = (dir, prefix = "") => {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return []; }
+    const out = [];
+    for (const d of ents) {
+      const rel = prefix ? `${prefix}/${d.name}` : d.name;
+      // Flat single-file app: apps/local/foo.py
+      if (d.isFile() && isApp(d.name)) { out.push(make(rel, d.name.replace(".py", ""), d.name, prefix)); continue; }
+      // Foldered app (local only): apps/local/<slug>/<slug>.py, else app.py, else the lone .py
+      if (prefix && d.isDirectory() && !d.name.startsWith("_") && !d.name.startsWith(".")) {
+        let subFiles = [];
+        try { subFiles = fs.readdirSync(path.join(dir, d.name)).filter(isApp); } catch (_) {}
+        const script = subFiles.includes(`${d.name}.py`) ? `${d.name}.py`
+          : subFiles.includes("app.py") ? "app.py"
+          : subFiles.length === 1 ? subFiles[0] : null;
+        if (script) out.push(make(`${rel}/${script}`, d.name, script, prefix));
+      }
+    }
+    return out;
+  };
+  return scan(APPS_DIR).concat(scan(path.join(APPS_DIR, "local"), "local"));
 }
 
 let appProc = null;  // { child, name, pid, startedAt, exitCode, error, output, buf }
