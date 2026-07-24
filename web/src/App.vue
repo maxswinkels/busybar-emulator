@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { device } from './composables/useDevice'
 import { icons, batteryIcons } from './icons'
 import Preview from './components/Preview.vue'
@@ -46,7 +46,17 @@ import TabDrawTool from './components/tabs/DrawTool.vue'
 import TabApps from './components/tabs/Apps.vue'
 import TabScenarios from './components/tabs/Scenarios.vue'
 
-const tab = ref('settings')
+const TABS = ['network', 'firmware', 'settings', 'draw-tool', 'apps', 'scenarios']
+function tabFromUrl() {
+  const p = location.pathname.replace(/^\//, '')
+  if (TABS.includes(p)) return p
+  const h = location.hash.replace(/^#\/?/, '') // legacy #apps-style links
+  return TABS.includes(h) ? h : 'settings'
+}
+const tab = ref(tabFromUrl())
+if (location.hash) history.replaceState(null, '', '/' + tab.value)
+watch(tab, v => { if (location.pathname !== '/' + v) history.pushState(null, '', '/' + v) })
+window.addEventListener('popstate', () => { tab.value = tabFromUrl() })
 const host = location.host || '127.0.0.1:8080'
 const year = new Date().getFullYear()
 

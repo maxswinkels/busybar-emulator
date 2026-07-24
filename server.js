@@ -323,8 +323,8 @@ const server = http.createServer(async (req, res) => {
   if (scenario.offline_until > Date.now() && p.startsWith("/api/") && !p.startsWith("/api/_")) { req.socket.destroy(); return; }
   if (method === "OPTIONS") { send(res, 204, {}); return; }
 
-  // static + stream (no auth)
-  if (method === "GET" && (p === "/" || p === "/index.html")) return serveStatic(res, fs.existsSync(path.join(DIST, "index.html")) ? path.join(DIST, "index.html") : path.join(PUBLIC, "index.html"));
+  // static + stream (no auth); UI tab paths (emulator-only) fall back to the SPA
+  if (method === "GET" && (p === "/" || p === "/index.html" || /^\/(network|firmware|settings|draw-tool|apps|scenarios)$/.test(p))) return serveStatic(res, fs.existsSync(path.join(DIST, "index.html")) ? path.join(DIST, "index.html") : path.join(PUBLIC, "index.html"));
   if (method === "GET" && p.startsWith("/static/")) return serveStatic(res, staticPath(DIST, p.replace(/^\//, "")));
   if ((method === "GET" || method === "HEAD") && p === "/favicon.png") return serveStatic(res, path.join(DIST, "favicon.png"));
   if (method === "GET" && p === "/events") {
