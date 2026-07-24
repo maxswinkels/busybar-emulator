@@ -391,7 +391,10 @@ const server = http.createServer(async (req, res) => {
       const ct = req.headers["content-type"] || "";
       if (ct.includes("application/json")) { const b = await readJson(req); buf = Buffer.from(b.data || "", "base64"); }
       else buf = await readBody(req);
-      state.assets[`${app}/${file}`] = { buf, type: "image/png" };
+      const ext = (file.match(/\.([a-z0-9]+)$/i) || [])[1];
+      const type = { png: "image/png", gif: "image/gif", jpg: "image/jpeg", jpeg: "image/jpeg",
+        wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg" }[(ext || "").toLowerCase()] || "application/octet-stream";
+      state.assets[`${app}/${file}`] = { buf, type };
       saveState(); logCall("POST", p, `${app}/${file} · ${buf.length}b`); return ok(res);
     }
     if (p === "/api/assets/upload" && method === "DELETE") {
