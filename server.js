@@ -432,6 +432,12 @@ const server = http.createServer(async (req, res) => {
       if (elements.length > 100) return fail(res, 400, "Elements number limit exceeded");
       let priority = b.priority == null ? 50 : b.priority;
       if (typeof priority !== "number" || priority < 1 || priority > 100) return fail(res, 400, "Bad request: priority 1-100");
+      // Firmware resolves image paths inside the drawing app's asset namespace
+      // (busylib docs: upload filename="logo.png", then draw path="logo.png").
+      // Rewrite bare paths to the namespaced asset key; full keys keep working.
+      for (const el of elements) {
+        if (el && el.type === "image" && el.path && state.assets[`${appName}/${el.path}`]) el.path = `${appName}/${el.path}`;
+      }
       if (!drawFrame(appName, elements, priority)) return fail(res, 409, "Not drawn due to low priority");
       if (b.led_notification_color) emit("led", { color: b.led_notification_color });
       logCall("POST", p, `${appName} · ${elements.length} el · pri ${priority}`); broadcast(); return ok(res);
@@ -463,7 +469,12 @@ const server = http.createServer(async (req, res) => {
       let url = null;
       // firmware resolves the basename after the last "/" incl. extension; also accept the bare name (emulator-only)
       if (b.stock_path) { const base = path.basename(b.stock_path); for (const k of [b.stock_path, base, base.replace(/\.(wav|mp3|ogg)$/i, "")]) if (SOUNDS[k]) { url = "/public/sounds/" + SOUNDS[k]; break; } }
-      if (!url && b.path) { if (state.assets[b.path]) url = "/assets/" + b.path; else if (state.storage[b.path]) url = "/api/storage/read?path=" + encodeURIComponent(b.path); }
+      if (!url && b.path) {
+        const nk = `${b.application_name}/${b.path}`;  // firmware resolves bare paths inside the app's asset namespace
+        if (state.assets[nk]) url = "/assets/" + nk;
+        else if (state.assets[b.path]) url = "/assets/" + b.path;
+        else if (state.storage[b.path]) url = "/api/storage/read?path=" + encodeURIComponent(b.path);
+      }
       // firmware 404s an unplayable file; no stock sounds are bundled, so unresolved paths 200 + beep fallback (emulator-only)
       emit("beep", { url, path: b.path || null, stock_path: b.stock_path || null }); return ok(res);
     }

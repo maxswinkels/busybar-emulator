@@ -58,8 +58,9 @@ def setup():
 
 def tick():
     # Replace with a real API call (open-meteo, wttr.in). Static demo values here.
+    # The bare filename resolves inside this app's asset namespace, like the firmware does.
     bar.display_draw(APP, [
-        image("demo.weather/sun16.png", x=0, y=0),
+        image("sun16.png", x=0, y=0),
         text("24", x=18, y=1, font="bold", color="0xFFFFFFFF"),
         text("C AMSTERDAM", x=32, y=2, font="small", color="0x7FB2FFFF"),
     ])
