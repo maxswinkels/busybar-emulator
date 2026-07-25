@@ -11,6 +11,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
@@ -131,15 +132,98 @@ function pushLine(rec, s, line) {
   appBcastTimer = setTimeout(() => { appBcastTimer = null; broadcast(); }, 50);
 }
 
-function startApp(entry, userArgs) {
+// Wire stdout/stderr of a child process into rec's line buffers via pushLine.
+function wireStreams(child, rec) {
+  function lineBuffer(stream, s) {
+    child[stream].on("data", (chunk) => {
+      rec.buf[s] += chunk.toString("utf8");
+      let nl;
+      while ((nl = rec.buf[s].indexOf("\n")) !== -1) {
+        pushLine(rec, s, rec.buf[s].slice(0, nl));
+        rec.buf[s] = rec.buf[s].slice(nl + 1);
+      }
+    });
+  }
+  lineBuffer("stdout", "out");
+  lineBuffer("stderr", "err");
+}
+
+// Run a setup child (venv create or pip install) with its streams wired into rec.
+// Resolves on exit code 0, rejects with "venv setup failed (exit N)" otherwise.
+// The child is assigned to rec.child while running so stopApp() can kill it.
+function runSetup(rec, cmd, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(PYTHON, [path.join(APPS_DIR, entry.file), "--host", `127.0.0.1:${PORT}`, ...userArgs], {
+    const child = spawn(cmd, args, {
       env: Object.assign({}, process.env, { PYTHONUNBUFFERED: "1" }),
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
-    const rec = { child, name: entry.name, pid: null, startedAt: Date.now(), exitCode: undefined, error: null, output: [], buf: { out: "", err: "" } };
-    appProc = rec;
+    rec.child = child;
+    wireStreams(child, rec);
+    child.on("error", (err) => { rec.child = null; reject(new Error(`venv setup failed (${err.message})`)); });
+    child.on("exit", (code) => {
+      // flush trailing partial lines from this setup child's streams
+      if (rec.buf.out) { pushLine(rec, "out", rec.buf.out); rec.buf.out = ""; }
+      if (rec.buf.err) { pushLine(rec, "err", rec.buf.err); rec.buf.err = ""; }
+      rec.child = null;
+      const n = code !== null ? code : -1;
+      if (n !== 0) reject(new Error(`venv setup failed (exit ${n})`));
+      else resolve();
+    });
+  });
+}
+
+async function startApp(entry, userArgs) {
+  const rec = { child: null, name: entry.name, pid: null, startedAt: Date.now(), exitCode: undefined, error: null, output: [], buf: { out: "", err: "" } };
+  appProc = rec;
+  broadcast();
+
+  // Determine whether this is a foldered app that needs a venv.
+  const fileDir = path.dirname(entry.file);
+  const isFoldered = fileDir !== "." && fileDir !== "local";
+  const folder = path.join(APPS_DIR, fileDir);
+  const reqFile = path.join(folder, "requirements.txt");
+  let pyBin = PYTHON;
+
+  if (isFoldered && fs.existsSync(reqFile)) {
+    const venvDir = path.join(folder, ".venv");
+    const pyBinPath = process.platform === "win32"
+      ? path.join(venvDir, "Scripts", "python.exe")
+      : path.join(venvDir, "bin", "python3");
+    const stamp = path.join(venvDir, ".req-sha");
+    const sha = crypto.createHash("sha256").update(fs.readFileSync(reqFile)).digest("hex");
+
+    let needSetup = true;
+    if (fs.existsSync(pyBinPath)) {
+      try { needSetup = fs.readFileSync(stamp, "utf8").trim() !== sha; } catch (_) {}
+    }
+
+    if (needSetup) {
+      try {
+        if (!fs.existsSync(pyBinPath)) {
+          pushLine(rec, "out", "[setup] creating .venv …");
+          await runSetup(rec, PYTHON, ["-m", "venv", venvDir]);
+        }
+        pushLine(rec, "out", "[setup] pip install -r requirements.txt …");
+        await runSetup(rec, pyBinPath, ["-m", "pip", "install", "-r", reqFile]);
+        fs.writeFileSync(stamp, sha, "utf8");
+        pushLine(rec, "out", "[setup] done");
+      } catch (e) {
+        rec.error = e.message;
+        broadcast();
+        throw e;
+      }
+    }
+    pyBin = pyBinPath;
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(pyBin, [path.join(APPS_DIR, entry.file), "--host", `127.0.0.1:${PORT}`, ...userArgs], {
+      env: Object.assign({}, process.env, { PYTHONUNBUFFERED: "1" }),
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    rec.child = child;
 
     let settled = false;
     function settle(err) { if (settled) return; settled = true; if (err) reject(err); else resolve(rec.pid); }
@@ -150,20 +234,7 @@ function startApp(entry, userArgs) {
       settle(err);
       if (rec === appProc) broadcast();
     });
-
-    function lineBuffer(stream, s) {
-      child[stream].on("data", (chunk) => {
-        rec.buf[s] += chunk.toString("utf8");
-        let nl;
-        while ((nl = rec.buf[s].indexOf("\n")) !== -1) {
-          pushLine(rec, s, rec.buf[s].slice(0, nl));
-          rec.buf[s] = rec.buf[s].slice(nl + 1);
-        }
-      });
-    }
-    lineBuffer("stdout", "out");
-    lineBuffer("stderr", "err");
-
+    wireStreams(child, rec);
     child.on("exit", (code) => {
       if (rec.buf.out) { pushLine(rec, "out", rec.buf.out); rec.buf.out = ""; }
       if (rec.buf.err) { pushLine(rec, "err", rec.buf.err); rec.buf.err = ""; }

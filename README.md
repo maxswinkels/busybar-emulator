@@ -113,7 +113,7 @@ curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/js
 | `GET /api/_animations` | *(emulator)* imported-animation manifest with `fps`/`sections` |
 | `GET /api/_sounds` | *(emulator)* stock-sound manifest `{name: filename}` (used by `sound_test.py`) |
 | `GET /api/_apps` | *(emulator)* list runnable example apps + current app state/output |
-| `POST /api/_apps/start` | *(emulator)* `{name, args?}`, spawn an app (stops any running app first) |
+| `POST /api/_apps/start` | *(emulator)* `{name, args?}`, spawn an app (stops any running app first); foldered `apps/local` apps with a `requirements.txt` run in an auto-created per-app `.venv` |
 | `POST /api/_apps/stop` | *(emulator)* stop the running app → `{stopped:bool}` |
 | `GET /api/_scenario` | *(emulator)* scenario state: power override, offline window, steal ownership |
 | `POST /api/_scenario/power` | *(emulator)* `{battery_charge?, state?}` set battery % / charging state (shown in `/api/status/power`) |
