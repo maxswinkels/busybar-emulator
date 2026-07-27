@@ -73,6 +73,58 @@ const APP_PARAMS = {
     options: ["all", ...Object.keys(SOUNDS).sort()] }],
 };
 
+// Auto-discover an argparse app's options by parsing its own `--help` output,
+// so the Apps tab can render inputs without a hand-written APP_PARAMS entry.
+// Only runs for scripts that mention argparse (others might loop on --help),
+// cached per file mtime; the runner passes --host itself so it is skipped.
+const ARG_SKIP = new Set(["-h", "--help", "--host", "--test"]);
+const argCache = {};
+function argparseParams(fullPath) {
+  let mtime;
+  try { mtime = fs.statSync(fullPath).mtimeMs; } catch (_) { return []; }
+  const hit = argCache[fullPath];
+  if (hit && hit.mtime === mtime) return hit.params;
+  let params = [];
+  try {
+    if (fs.readFileSync(fullPath, "utf8").includes("argparse")) {
+      const r = spawnSync(PYTHON, [fullPath, "--help"], { timeout: 3000, encoding: "utf8" });
+      if (r.status === 0 && r.stdout) params = parseHelp(r.stdout);
+    }
+  } catch (_) {}
+  argCache[fullPath] = { mtime, params };
+  return params;
+}
+function parseHelp(help) {
+  const params = [];
+  // option entries look like "  --theme {a,b,c}  help..." or "  --user USER  help..."
+  // or "  --test  help..."; continuation lines are indented further.
+  const re = /^[ ]{2}(--[\w-]+)(?:[ =](\{[^}]*\}|[A-Z][\w-]*))?(?:[ \t]{2,}(\S.*))?$/gm;
+  let m;
+  while ((m = re.exec(help)) !== null) {
+    const [, flag, meta, rest] = m;
+    if (ARG_SKIP.has(flag)) continue;
+    const key = flag.replace(/^--/, "");
+    const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, " ");
+    // find the help text: trailing same-line text or the indented next line
+    let hint = rest || "";
+    if (!hint) {
+      const after = help.slice(m.index + m[0].length);
+      const cont = after.match(/^\n\s{10,}(\S.*)/);
+      if (cont) hint = cont[1];
+    }
+    const def = (hint.match(/\(default:\s*([^)]+)\)/) || [])[1];
+    if (meta && meta.startsWith("{")) {
+      const options = meta.slice(1, -1).split(",").map((s) => s.trim()).filter(Boolean);
+      params.push({ key, label, type: "select", flag, options, default: def || options[0], help: hint });
+    } else if (!meta) {
+      params.push({ key, label, type: "check", flag, help: hint });
+    } else {
+      params.push({ key, label, type: "text", flag, placeholder: def || "", help: hint });
+    }
+  }
+  return params;
+}
+
 function scanApps() {
   const isApp = (f) => f.endsWith(".py") && f !== "busybar.py" && !f.startsWith("_");
   const describe = (fullPath, fallback) => {
@@ -86,8 +138,9 @@ function scanApps() {
   // rel is the path under apps/ used to spawn the script; slug (its basename or
   // folder name) is the display name and the APP_PARAMS key.
   const make = (rel, slug, script, prefix) => {
+    const full = path.join(APPS_DIR, rel);
     const entry = { name: prefix ? `${prefix}/${slug}` : slug, file: rel,
-      description: describe(path.join(APPS_DIR, rel), slug), params: APP_PARAMS[script] || [] };
+      description: describe(full, slug), params: APP_PARAMS[script] || argparseParams(full) };
     if (prefix) entry.local = true;
     return entry;
   };

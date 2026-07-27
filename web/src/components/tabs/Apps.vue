@@ -36,21 +36,35 @@
             </div>
             <span class="app-desc">{{ app.description }}</span>
           </div>
-          <div class="app-row-controls" v-if="app.params && app.params.length">
+          <div
+            class="app-row-controls"
+            :class="{ 'params-grid': app.params.length >= 4 }"
+            v-if="app.params && app.params.length"
+          >
             <template v-for="param in app.params" :key="param.key">
               <select
                 v-if="param.type === 'select'"
                 class="app-args"
                 v-model="paramValues[app.name + '.' + param.key]"
+                :title="param.help || param.label"
               >
                 <option v-for="opt in param.options" :key="opt" :value="opt">{{ opt }}</option>
               </select>
+              <label
+                v-else-if="param.type === 'check'"
+                class="app-check"
+                :title="param.help || param.label"
+              >
+                <input type="checkbox" v-model="paramValues[app.name + '.' + param.key]" />
+                {{ param.label }}
+              </label>
               <input
                 v-else-if="param.type === 'text'"
                 class="app-args"
                 type="text"
                 v-model="paramValues[app.name + '.' + param.key]"
                 :placeholder="param.placeholder || param.label"
+                :title="param.help || param.label"
                 @keydown.enter="run(app)"
               />
             </template>
@@ -149,7 +163,7 @@ onMounted(async () => {
     for (const param of (app.params || [])) {
       const k = app.name + '.' + param.key
       if (paramValues.value[k] === undefined) {
-        paramValues.value[k] = param.default ?? ''
+        paramValues.value[k] = param.type === 'check' ? false : (param.default ?? '')
       }
     }
   }
@@ -159,10 +173,12 @@ function buildArgs(app) {
   const args = []
   for (const param of (app.params || [])) {
     const val = paramValues.value[app.name + '.' + param.key] ?? ''
-    if (param.positional) {
+    if (param.type === 'check') {
+      if (val && param.flag) args.push(param.flag)
+    } else if (param.positional) {
       if (val) args.push(val)
     } else if (param.flag) {
-      if (val) args.push(param.flag, val)
+      if (val) args.push(param.flag, String(val))
     }
   }
   return args

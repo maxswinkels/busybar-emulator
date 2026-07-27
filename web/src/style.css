@@ -181,9 +181,12 @@ textarea:focus{outline:none;box-shadow:0 0 0 2px var(--brand)}
 .app-tag{font-size:10px;padding:1px 7px;border-radius:999px;border:1px solid var(--track);color:var(--muted);background:transparent;margin-left:6px}
 .app-desc{font-size:12.5px;color:var(--muted);line-height:1.4}
 .app-row-controls{display:flex;gap:8px;align-items:center}
+.app-row-controls.params-grid{display:grid;grid-template-columns:1fr 1fr}
+.app-row-controls.params-grid .app-args{width:100%;box-sizing:border-box}
 .app-args{flex:1;background:var(--card);border:1px solid var(--ring-out);color:var(--text);border-radius:9px;padding:7px 10px;font-family:var(--mono);font-size:12.5px}
 .app-args:focus{outline:none;box-shadow:0 0 0 2px var(--brand)}
 .app-args::placeholder{color:var(--faint)}
+.app-check{display:flex;align-items:center;gap:6px;color:var(--text);font-size:12.5px;font-family:var(--mono);white-space:nowrap}
 /* app output terminal — always dark, regardless of theme */
 .term{background:#0c0e12;border-radius:20px;overflow:hidden;box-shadow:inset 0 1px 1px rgba(255,255,255,.05),0 0 0 1px rgba(255,255,255,.08),0 18px 40px -28px rgba(0,0,0,.6)}
 .term-bar{display:flex;align-items:center;gap:12px;padding:11px 16px;background:#15181e;border-bottom:1px solid rgba(255,255,255,.06)}
