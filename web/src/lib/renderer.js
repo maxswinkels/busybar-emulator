@@ -74,15 +74,22 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
   function drawMonoIcon(name, x, y, r, g, b) { const ic = ICONS[name]; if (!ic) return false; for (let ry = 0; ry < ic.length; ry++) for (let rx = 0; rx < ic[ry].length; rx++) if (ic[ry][rx] === "#") px(x + rx, y + ry, r, g, b); return true; }
 
   const imgCache = {};
-  function sampleImage(src, targetH) {
-    const key = src + "|" + (targetH || 0); if (imgCache[key]) return imgCache[key];
-    const rec = { ready: false, w: 0, h: 0, px: null }; imgCache[key] = rec;
+  // ver (the frame stamp) re-fetches mutable uploaded assets when a new draw
+  // arrives; the old pixels stay on screen until the new ones are decoded.
+  function loadInto(rec, src, targetH, ver) {
     const img = new Image(); img.crossOrigin = "anonymous";
-    img.onload = () => { let w = img.naturalWidth || 16, h = img.naturalHeight || 16; if (targetH && h > targetH) { w = Math.max(1, Math.round(w * targetH / h)); h = targetH; } const c = document.createElement("canvas"); c.width = w; c.height = h; const cx = c.getContext("2d", { willReadFrequently: true }); cx.imageSmoothingEnabled = (w > 72 || h > 72); cx.drawImage(img, 0, 0, w, h); try { rec.px = cx.getImageData(0, 0, w, h).data; rec.w = w; rec.h = h; rec.ready = true; } catch (_) {} };
-    img.src = src; return rec;
+    img.onload = () => { let w = img.naturalWidth || 16, h = img.naturalHeight || 16; if (targetH && h > targetH) { w = Math.max(1, Math.round(w * targetH / h)); h = targetH; } const c = document.createElement("canvas"); c.width = w; c.height = h; const cx = c.getContext("2d", { willReadFrequently: true }); cx.imageSmoothingEnabled = (w > 72 || h > 72); cx.drawImage(img, 0, 0, w, h); try { rec.px = cx.getImageData(0, 0, w, h).data; rec.w = w; rec.h = h; rec.ready = true; rec.ver = ver; } catch (_) {} };
+    img.src = ver === undefined ? src : src + (src.includes("?") ? "&" : "?") + "v=" + ver;
   }
-  function drawImageEl(src, el, op, targetH) {
-    const rec = sampleImage(src, targetH); if (!rec.ready) return;
+  function sampleImage(src, targetH, ver) {
+    const key = src + "|" + (targetH || 0);
+    let rec = imgCache[key];
+    if (!rec) { rec = imgCache[key] = { ready: false, w: 0, h: 0, px: null, ver, loading: ver }; loadInto(rec, src, targetH, ver); return rec; }
+    if (ver !== undefined && rec.ver !== ver && rec.loading !== ver) { rec.loading = ver; loadInto(rec, src, targetH, ver); }
+    return rec;
+  }
+  function drawImageEl(src, el, op, targetH, ver) {
+    const rec = sampleImage(src, targetH, ver); if (!rec.ready) return;
     const [dx, dy] = anchor(el, rec.w, rec.h);
     for (let iy = 0; iy < rec.h; iy++) for (let ix = 0; ix < rec.w; ix++) { const o = (iy * rec.w + ix) * 4; const a = rec.px[o + 3] / 255 * op; if (a < 0.15) continue; pxa(dx + ix, dy + iy, rec.px[o], rec.px[o + 1], rec.px[o + 2], a); }
   }
@@ -146,7 +153,7 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
         if (el.stock_path && ANIM[el.stock_path]) { playAnim(el.stock_path, el, t, frameStamp, op); continue; }
         if (el.stock_path) { const url = ICON_INDEX[el.stock_path] || ICON_INDEX[el.stock_path.split("/").pop()]; if (url) { drawImageEl(url, el, op, 14); continue; } const [r, g, b] = parseColor(el.color || "0xFFFFFFFF"); if (drawMonoIcon(el.stock_path, el.x | 0, el.y | 0, r, g, b)) continue; }
         if (el.path && ICONS[el.path]) { const [r, g, b] = parseColor(el.color || "0xFFFFFFFF"); drawMonoIcon(el.path, el.x | 0, el.y | 0, r, g, b); continue; }
-        if (el.path) drawImageEl("/assets/" + el.path, el, op);
+        if (el.path) drawImageEl("/assets/" + el.path, el, op, undefined, frameStamp);
         continue;
       }
       const [r, g, b] = parseColor(el.color || "0xFFFFFFFF");
