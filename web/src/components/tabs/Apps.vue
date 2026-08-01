@@ -87,7 +87,7 @@
     </div>
 
     <!-- terminal -->
-    <div class="term" ref="termEl">
+    <div class="term">
       <div class="term-bar">
         <span class="term-dots"><i></i><i></i><i></i></span>
         <span class="term-title">{{ device.app.name ? cmdLine : 'terminal' }}</span>
@@ -142,7 +142,6 @@ const filteredApps = computed(() => {
 })
 const startError = ref('')
 const logEl = ref(null)
-const termEl = ref(null)
 // args of the run started from this page (server state doesn't carry args)
 const lastArgs = ref([])
 
@@ -210,9 +209,4 @@ function maybeScroll() {
 }
 
 watch(() => device.app.output?.length, () => { maybeScroll() })
-
-// bring the terminal into view when a run starts
-watch(() => device.app.running, (running) => {
-  if (running) nextTick(() => termEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
-})
 </script>
