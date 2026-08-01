@@ -167,7 +167,7 @@ function remove(id) { const i = shapes.findIndex(s => s.id === id); if (i >= 0) 
 function clearAll() { shapes.splice(0); selId.value = null; api('DELETE', '/api/display/draw'); status.value = 'cleared'; statusCls.value = 'status-line' }
 
 /* push (live) */
-function toHex8(c) { return '0x' + (c || '#ffffff').replace('#', '').toUpperCase() + 'FF' }
+function toHex8(c) { return '#' + (c || '#ffffff').replace('#', '').toUpperCase() + 'FF' }
 function toElement(s) {
   if (s.type === 'text') return { id: s.id, type: 'text', text: s.text, x: s.x, y: s.y, font: s.font, color: toHex8(s.color) }
   if (s.type === 'rect') return { id: s.id, type: 'rectangle', x: s.x, y: s.y, width: Math.max(1, s.w | 0), height: Math.max(1, s.h | 0), border_width: 0, fill: s.fill === 'none' ? 'none' : 'solid', fill_colors: [toHex8(s.color), toHex8(s.color)] }

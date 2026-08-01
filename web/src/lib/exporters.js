@@ -36,7 +36,7 @@ function pyText(el) {
   if (el.x !== 0) args.push(`x=${el.x}`);
   if (el.y !== 0) args.push(`y=${el.y}`);
   if (el.font && el.font !== "normal") args.push(`font="${el.font}"`);
-  if (el.color && el.color !== "0xFFFFFFFF") args.push(`color="${el.color}"`);
+  if (el.color && el.color !== "#FFFFFFFF") args.push(`color="${el.color}"`);
   if (el.align) args.push(`align="${el.align}"`);
   if (el.display && el.display !== "front") args.push(`display="${el.display}"`);
   return `    text(${args.join(", ")})`;

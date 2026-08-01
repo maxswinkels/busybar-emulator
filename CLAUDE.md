@@ -47,6 +47,6 @@ apps/*.py  ──POST /api/display/draw──▶  server.js  ──SSE /events�
 
 ## Conventions
 
-- **Font names** are the device's set: `tiny small normal condensed bold large extra_large global` (see `FONTS` in `apps/busybar.py` and `ATLAS_KEY` in `web/src/lib/atlas.js`). Colors are `0xRRGGBBAA` strings.
+- **Font names** are the device's set: `tiny small normal condensed bold large extra_large global` (see `FONTS` in `apps/busybar.py` and `ATLAS_KEY` in `web/src/lib/atlas.js`). Colors are `#RRGGBBAA` strings.
 - The draw payload accepts both `application_name` and `app_id` (community scripts use the latter), preserve that when touching the draw route.
 - Bundled fonts/animations/icons/artwork are © Flipper Devices under CC-BY 4.0 / SIL OFL 1.1 (code is MIT). Keep `docs/ATTRIBUTION.md` accurate when adding or removing bundled assets.

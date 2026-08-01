@@ -30,10 +30,10 @@ ALIGNS = ("top_left", "top_mid", "top_right", "mid_left", "center", "mid_right",
           "bottom_left", "bottom_mid", "bottom_right")
 
 
-def text(txt, x=0, y=0, font="normal", color="0xFFFFFFFF", align=None, width=None,
+def text(txt, x=0, y=0, font="normal", color="#FFFFFFFF", align=None, width=None,
          scroll_rate=None, scroll_start_delay=None, scroll_repeat_delay=None,
          timeout=None, display_until=None, id=None, display="front"):
-    """Text element. color=0xRRGGBBAA. scroll_rate = pixel-columns/minute (0=off).
+    """Text element. color=#RRGGBBAA. scroll_rate = pixel-columns/minute (0=off).
     timeout is in SECONDS. align ∈ ALIGNS anchors the element box at (x,y)."""
     el = {"id": id or _next_id(), "type": "text", "text": str(txt), "x": x, "y": y,
           "font": font, "color": color, "display": display}
@@ -89,7 +89,7 @@ def rectangle(x, y, width, height, radius=None, border_width=None, border_color=
 
 
 def countdown(timestamp, x=0, y=0, direction="time_left", show_hours="when_non_zero",
-              color="0xFFFFFFFF", align=None, id=None, display="front"):
+              color="#FFFFFFFF", align=None, id=None, display="front"):
     """Countdown element (device renders it in busy_superscript_7). timestamp = unix epoch."""
     el = {"id": id or _next_id(), "type": "countdown", "x": x, "y": y,
           "timestamp": str(timestamp), "direction": direction,
