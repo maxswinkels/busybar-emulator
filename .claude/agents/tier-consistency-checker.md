@@ -19,7 +19,7 @@ You verify that the BUSY Bar emulator's three tiers and its documentation agree 
    - `drawFrame`, which element types it dispatches on and which fields it actually honors per type (e.g. `display:"back"` skipped, `timeout`/`display_until` expiry, `opacity`, scroll fields, `align` via `anchor`).
    - The `ALIGN` map (must cover every value in `ALIGNS`).
    - The `ICONS` mono-icon set (`sun cloud heart check bolt`), must match what busybar.py's `image()` docstring and the README advertise as builtin stock icons.
-   - `parseColor`, the accepted color format (`0xRRGGBBAA`, also tolerating `#`/6-digit).
+   - `parseColor`, the accepted color format (`#RRGGBBAA`; parseColor also tolerates a legacy `0x` prefix and 6-digit).
 4. `/Users/maxswinkels/Developer/busybar-emulator/README.md`
    - The endpoint table and the JSONC element-schema block (inside the "Endpoints & element schema" details section), including the documented font list, align range, and common fields.
 

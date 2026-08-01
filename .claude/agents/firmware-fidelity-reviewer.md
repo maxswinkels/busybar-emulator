@@ -20,7 +20,7 @@ The real firmware lives at github.com/busy-app/busybar-firmware, in the `web_ser
 6. **Query-parameter conventions.** Brightness is a single `?value=auto|0-100` (GET returns `{"value": "auto"|"NN"}` as a string). Assets upload is a raw octet-stream body with `?application_name=&file=`. Storage endpoints use `?path=`.
 7. **Busy timer.** `/api/busy/snapshot` uses the snapshot envelope (`{snapshot: {...}, snapshot_timestamp_ms}` with `type` in NOT_STARTED|INFINITE|SIMPLE|INTERVAL); profiles are the `busy|custom` slots at `/api/busy/profiles/{busy|custom}`.
 8. **Status.** `GET /api/status` is nested into `device`/`firmware`/`system`/`power` groups (each also addressable as `/api/status/<group>`), with `uptime` as a formatted string, not a number.
-9. **Element schema.** Types: `text`, `image`, `animation`, `rectangle`, `countdown`. Device fonts: `tiny small normal condensed bold large extra_large global`. Colors are `0xRRGGBBAA` strings.
+9. **Element schema.** Types: `text`, `image`, `animation`, `rectangle`, `countdown`. Device fonts: `tiny small normal condensed bold large extra_large global`. Colors are `#RRGGBBAA` strings.
 
 Also flag: new convenience routes or fields not in the firmware unless clearly marked emulator-only (the established markers are the `_` prefix, e.g. `/api/_animations`, and documented notes); Python client methods whose path/verb/body no longer mirror the firmware (the client must run unchanged against real hardware); new npm/pip dependencies (server is zero-dependency Node stdlib, client is Python stdlib).
 

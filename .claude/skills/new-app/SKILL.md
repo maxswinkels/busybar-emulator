@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Creates `apps/<name>.py`, a minimal but runnable app that drives the emulator
 (or the real bar) through the `apps/busybar.py` stdlib client, following the
-conventions of the existing apps (`apps/clock.py`, `apps/weather.py`).
+conventions of the existing apps (`apps/clock.py`, `apps/busy_status.py`).
 
 The app name is given as the skill argument: `$ARGUMENTS`.
 
@@ -66,8 +66,8 @@ Conventions this encodes (keep them):
   it handles the sleep loop and a clean Ctrl-C exit. A one-shot app can just call
   `tick()` once instead.
 - Fonts are the device set: `tiny small normal condensed bold large extra_large global`.
-  Colors are `0xRRGGBBAA` strings (e.g. `"0x2B7FFFFF"`).
-- One-time setup (e.g. `bar.assets_upload(...)` for icons, as in `apps/weather.py`)
+  Colors are `#RRGGBBAA` strings (e.g. `"#2B7FFFFF"`).
+- One-time setup (e.g. `bar.assets_upload(...)` for icons)
   goes in a `setup()` called from `__main__` before the loop.
 
 ## Step 3: tell the user how to run it

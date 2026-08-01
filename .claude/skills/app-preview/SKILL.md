@@ -36,7 +36,7 @@ Arguments: `<app-name> [app-args...] [--gif [seconds]] [--out <path>]`
 3. **Open the UI.** Load the Playwright tools in ONE ToolSearch call
    (`select:mcp__playwright__browser_navigate,mcp__playwright__browser_evaluate,mcp__playwright__browser_close`),
    navigate to `http://127.0.0.1:8080`, then wait ~2 s so the SSE stream and
-   the app's first frames have arrived (for slow-starting apps like `weather`,
+   the app's first frames have arrived (for slow-starting apps like `ping_monitor`,
    confirm via `GET /api/_apps` output that it is drawing before capturing).
 
 4. **Capture.** Use `browser_evaluate` with the matching snippet from this

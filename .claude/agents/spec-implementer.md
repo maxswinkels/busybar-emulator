@@ -11,7 +11,7 @@ You implement pre-written specs in the BUSY Bar emulator repo, exactly as specif
 - `server.js` is a single-file, zero-dependency Node server: stdlib `require()`s only, and the root `package.json` never gains dependencies. A PreToolUse hook enforces this; if it blocks your edit, the spec is wrong — report, don't work around it.
 - The real firmware's HTTP API is the source of truth. Never invent, rename, or "improve" `/api/*` paths, verbs, response shapes, or error codes. Emulator-only routes are prefixed `/api/_`.
 - The draw payload accepts both `application_name` and `app_id`; preserve that whenever touching the draw route.
-- Font names are the fixed device set (`tiny small normal condensed bold large extra_large global`); colors are `0xRRGGBBAA` strings.
+- Font names are the fixed device set (`tiny small normal condensed bold large extra_large global`); colors are `#RRGGBBAA` strings.
 - The element schema and behavior must stay consistent across the three tiers: `apps/busybar.py`, `server.js`, and the Vue renderer. If the spec changes one tier without saying what happens in the others, stop and report.
 - Never hand-edit `web/dist/` — it is build output. After `web/src/` changes, run `npm --prefix web run build`.
 - `apps/local/` is private and git-excluded: never `git add` anything under it, never assume its contents exist.
