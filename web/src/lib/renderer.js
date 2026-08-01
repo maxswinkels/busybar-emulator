@@ -132,7 +132,7 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
     const hh = Math.floor(sec / 3600), mm = Math.floor(sec % 3600 / 60), ss = Math.floor(sec % 60);
     const showH = el.show_hours === "always" || hh > 0;
     const str = (showH ? String(hh).padStart(2, "0") + ":" : "") + String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
-    const [r, g, b] = parseColor(el.color || "0xFFFFFFFF"); const m = rasterize(str, "bold"); if (!m) return;
+    const [r, g, b] = parseColor(el.color || "#FFFFFFFF"); const m = rasterize(str, "bold"); if (!m) return;
     const [dx, dy] = anchor(el, m.w, m.h); blitMask(m, dx, dy, r, g, b);
   }
 
@@ -151,12 +151,12 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
       if (el.type === "countdown") { drawCountdown(el, nowUnix); continue; }
       if (el.type === "image" || el.path || el.stock_path) {
         if (el.stock_path && ANIM[el.stock_path]) { playAnim(el.stock_path, el, t, frameStamp, op); continue; }
-        if (el.stock_path) { const url = ICON_INDEX[el.stock_path] || ICON_INDEX[el.stock_path.split("/").pop()]; if (url) { drawImageEl(url, el, op, 14); continue; } const [r, g, b] = parseColor(el.color || "0xFFFFFFFF"); if (drawMonoIcon(el.stock_path, el.x | 0, el.y | 0, r, g, b)) continue; }
-        if (el.path && ICONS[el.path]) { const [r, g, b] = parseColor(el.color || "0xFFFFFFFF"); drawMonoIcon(el.path, el.x | 0, el.y | 0, r, g, b); continue; }
+        if (el.stock_path) { const url = ICON_INDEX[el.stock_path] || ICON_INDEX[el.stock_path.split("/").pop()]; if (url) { drawImageEl(url, el, op, 14); continue; } const [r, g, b] = parseColor(el.color || "#FFFFFFFF"); if (drawMonoIcon(el.stock_path, el.x | 0, el.y | 0, r, g, b)) continue; }
+        if (el.path && ICONS[el.path]) { const [r, g, b] = parseColor(el.color || "#FFFFFFFF"); drawMonoIcon(el.path, el.x | 0, el.y | 0, r, g, b); continue; }
         if (el.path) drawImageEl("/assets/" + el.path, el, op, undefined, frameStamp);
         continue;
       }
-      const [r, g, b] = parseColor(el.color || "0xFFFFFFFF");
+      const [r, g, b] = parseColor(el.color || "#FFFFFFFF");
       const txt = String(el.text == null ? "" : el.text);
       const m = rasterize(txt, el.font); if (!m) continue;
       if (el.scroll_rate > 0) {
@@ -220,7 +220,8 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
     if (!running) return;
     const t = now / 1000; DT = Math.min(0.1, t - last); last = t;
     const model = getModel(), stamp = getStamp();
-    const bv = model.brightness; bright = (bv === "auto" || bv == null ? 80 : bv) / 100;
+    // Hardware never fully turns off: 0% brightness still emits ~50% light, so map 0-100% onto a 0.5-1.0 output floor.
+    const bv = model.brightness; const pct = (bv === "auto" || bv == null ? 80 : bv) / 100; bright = 0.5 + 0.5 * pct;
     clearBuf();
     const els = (model.frame && model.frame.elements) || [];
     if (els.length) drawFrame(els, t, stamp, model.frame.application_name); else drawIdle(t, model.connected);
