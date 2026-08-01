@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BUSY Bar design preview</title>
+<script>
+  /* apply the shared theme before paint so the preview matches the emulator UI */
+  (function () { var t = localStorage.getItem('bb-theme'); if (t) document.documentElement.setAttribute('data-theme', t); })();
+</script>
+<style>
+  @font-face{font-family:'Inter';src:url('/public/fonts/Inter.ttf') format('truetype-variations');font-weight:100 900;font-style:normal;font-display:swap}
+
+  :root{
+    --brand:#2B7FFF;--brand-600:#2266CC;--error:#E60022;--success:#22C55E;--warn:#F59E0B;
+    --n50:#FAFAFA;--n100:#F5F5F5;--n200:#E5E5E5;--n300:#D4D4D4;--n400:#A3A3A3;--n500:#737373;--n700:#404040;--n800:#262626;--n900:#171717;--n950:#0A0A0A;
+    --font:'Inter',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+    /* light */
+    --bg:var(--n50);--card:#FFFFFF;--elevated:rgba(245,245,245,.9);--accent25:rgba(212,212,212,.28);
+    --text:var(--n900);--muted:var(--n500);--faint:var(--n400);
+    --ring-in:rgba(255,255,255,.6);--ring-out:rgba(0,0,0,.06);--btn:rgba(0,0,0,.05);--btn-hover:rgba(0,0,0,.09);
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:var(--n950);--card:#181818;--elevated:rgba(38,38,38,.55);--accent25:rgba(64,64,64,.32);
+    --text:#ededed;--muted:#8a8a8a;--faint:#5f5f5f;
+    --ring-in:rgba(255,255,255,.08);--ring-out:rgba(255,255,255,.05);--btn:rgba(255,255,255,.07);--btn-hover:rgba(255,255,255,.12);
+  }}
+  :root[data-theme="dark"]{
+    --bg:var(--n950);--card:#181818;--elevated:rgba(38,38,38,.55);--accent25:rgba(64,64,64,.32);
+    --text:#ededed;--muted:#8a8a8a;--faint:#5f5f5f;
+    --ring-in:rgba(255,255,255,.08);--ring-out:rgba(255,255,255,.05);--btn:rgba(255,255,255,.07);--btn-hover:rgba(255,255,255,.12);
+  }
+
+  *{box-sizing:border-box}html,body{margin:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;-webkit-font-smoothing:antialiased}
+  #app{padding:22px 16px 104px}
+  button{font-family:inherit}
+  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+  .glass{background:var(--card);border-radius:24px;box-shadow:inset 0 1px 1px 0 var(--ring-in),0 0 0 1px var(--ring-out),0 18px 40px -28px rgba(0,0,0,.5)}
+
+  .app-header{position:relative;height:48px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 2px}
+  .h-left{display:flex;align-items:center;gap:18px;min-width:0}
+  .h-center{position:absolute;left:50%;transform:translateX(-50%);font-size:19px;font-weight:500;white-space:nowrap}
+  .h-right{display:flex;align-items:center;gap:14px}
+  .logo{display:inline-flex;color:var(--text);cursor:pointer}
+  .logo svg{height:23px;width:auto;display:block}
+  .sub{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
+  .sub .dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex:none}
+  @media(max-width:720px){.sub,.h-center{display:none}}
+  .icon-btn{cursor:pointer;border:none;background:var(--btn);color:var(--text);width:38px;height:38px;border-radius:999px;display:grid;place-items:center;transition:.15s;font-size:16px}
+  .icon-btn:hover{background:var(--btn-hover)}
+
+  .intro{padding:2px 2px 0;color:var(--muted);font-size:13px;line-height:1.6;max-width:72ch}
+  .intro code{font-family:var(--mono);color:var(--brand)}
+
+  #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:18px}
+  .card{padding:16px;cursor:pointer;transition:.15s;border:1px solid transparent}
+  .card:hover{transform:translateY(-1px)}
+  .card.sel{box-shadow:inset 0 1px 1px 0 var(--ring-in),0 0 0 2px var(--brand),0 18px 40px -28px rgba(0,0,0,.5)}
+  .led-frame{background:#050506;border:1px solid #26282c;border-radius:12px;padding:8px;overflow:hidden}
+  .led-frame canvas{display:block;width:100%;height:auto;image-rendering:pixelated;border-radius:4px}
+  .card .name{font-size:15px;font-weight:600;margin:12px 2px 2px;display:flex;align-items:baseline;gap:7px}
+  .card .name .num{color:var(--brand);font-variant-numeric:tabular-nums}
+  .card .note{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0 2px}
+
+  #pick{position:fixed;left:16px;right:16px;bottom:16px;max-width:1168px;margin:0 auto;
+        background:var(--card);border-radius:18px;box-shadow:inset 0 1px 1px 0 var(--ring-in),0 0 0 1px var(--ring-out),0 18px 40px -20px rgba(0,0,0,.55);
+        padding:15px 22px;font-size:14px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:10px}
+  #pick .badge-num{flex:none;width:26px;height:26px;border-radius:999px;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:600}
+  #pick.hidden{display:none}
+  #pick em{color:var(--text);font-style:normal;font-weight:600}
+
+  .app-footer{display:flex;flex-direction:column;gap:3px;align-items:center;text-align:center;padding:6px 0 2px;font-size:12px;color:var(--faint);line-height:1.6}
+  .app-footer a{color:var(--muted);text-decoration:none}
+  .app-footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="wrap">
+    <header class="app-header">
+      <div class="h-left">
+        <span class="logo" id="logo" title="Toggle light / dark"></span>
+        <span class="sub"><span class="dot"></span><span id="count">design preview</span></span>
+      </div>
+      <div class="h-center">Design preview</div>
+      <div class="h-right">
+        <button class="icon-btn" id="theme" title="Toggle light / dark">☾</button>
+      </div>
+    </header>
+
+    <p class="intro">Click the variant you like best and tell me its number. To tweak or add variants, edit <code>public/_preview/designs.js</code> and refresh. The rendering uses the same font atlas, gamma, LED look and baseline as the real emulator renderer.</p>
+
+    <div id="grid"></div>
+
+    <footer class="app-footer">
+      <span>BUSY Bar Emulator · design preview harness</span>
+      <span>Unofficial project. "BUSY Bar" is a trademark of <a href="https://busy.app" target="_blank" rel="noopener">Flipper Devices</a>.</span>
+    </footer>
+  </div>
+</div>
+<div id="pick" class="hidden"><span class="badge-num"></span><span id="pick-text"></span></div>
+
+<script>
+  /* --- header: shared logo + theme toggle (same behaviour as the emulator UI) --- */
+  const rootEl = document.documentElement;
+  fetch('/public/brand/logo-white.svg').then((r) => r.text()).then((t) => { document.getElementById('logo').innerHTML = t; }).catch(() => {});
+  function curTheme() { return rootEl.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'); }
+  function syncGlyph() { document.getElementById('theme').textContent = curTheme() === 'dark' ? '☀' : '☾'; }
+  function toggleTheme() { const n = curTheme() === 'dark' ? 'light' : 'dark'; rootEl.setAttribute('data-theme', n); localStorage.setItem('bb-theme', n); syncGlyph(); }
+  document.getElementById('theme').addEventListener('click', toggleTheme);
+  document.getElementById('logo').addEventListener('click', toggleTheme);
+  syncGlyph();
+</script>
+
+<script src="designs.js"></script>
+<script>
+(async () => {
+  const atlas = await fetch("/public/fonts/font-atlas.json").then((r) => r.json());
+
+  /* --- faithful mini-renderer: semantics copied from web/src/lib/renderer.js + atlas.js --- */
+  const W = 72, H = 16, SCALE = 8;
+  const GAMMA_LUT = (() => { const g = 1 / 0.35, lut = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 255; lut[i] = 255 * (Math.pow(x, g) + 0.08 * x) / 1.08; } return lut; })();
+  const ALIGN = { top_left: [0, 0], top_mid: [0.5, 0], top_right: [1, 0], mid_left: [0, 0.5], center: [0.5, 0.5], mid_right: [1, 0.5], bottom_left: [0, 1], bottom_mid: [0.5, 1], bottom_right: [1, 1] };
+
+  // Firmware-true vertical metrics per device font (see web/src/lib/atlas.js): the
+  // atlas is baked ASCII-only, so glyphs are shifted down by (fw_ascent - atlas_ascent)
+  // and use the firmware line-height, matching the real bar. Each entry [ascent, line_height].
+  const FW_METRICS = {
+    tiny: [5, 6], small: [7, 9], normal: [9, 11], condensed: [9, 11],
+    bold: [9, 11], large: [11, 13], extra_large: [12, 14], global: [8, 11],
+  };
+
+  function parseColor(c) {
+    if (c == null) return [255, 255, 255, 1];
+    const s = String(c).trim().replace(/^0x/i, "").replace(/^#/, "");
+    let r = 255, g = 255, b = 255, a = 255;
+    if (s.length >= 6) { r = parseInt(s.slice(0, 2), 16); g = parseInt(s.slice(2, 4), 16); b = parseInt(s.slice(4, 6), 16); }
+    if (s.length >= 8) a = parseInt(s.slice(6, 8), 16);
+    return [r, g, b, a / 255];
+  }
+
+  const rasterCache = new Map();
+  function rasterize(text, fontId) {
+    const font = atlas[fontId] || atlas.normal; if (!font) return null;
+    const fw = FW_METRICS[fontId] || FW_METRICS.normal;
+    const dyOff = fw[0] - (font.ascent || 0);
+    const key = fontId + "|" + text;
+    const hit = rasterCache.get(key); if (hit) return hit;
+    let pen = 0, maxRight = 0; const parts = [];
+    for (const ch of String(text)) {
+      const g = font.glyphs[String(ch.codePointAt(0))] || font.glyphs["63"];
+      if (!g) continue;
+      parts.push([pen, g]);
+      maxRight = Math.max(maxRight, pen + g.ox + g.w);
+      pen += g.adv;
+    }
+    const w = Math.max(1, Math.max(pen, maxRight)), h = fw[1];
+    const mask = new Uint8Array(w * h);
+    for (const [px0, g] of parts) {
+      for (let ry = 0; ry < g.h; ry++) {
+        const hex = g.rows[ry]; if (!hex) continue;
+        const bits = parseInt(hex, 16), total = hex.length * 4, yy = g.oy + dyOff + ry;
+        if (yy < 0 || yy >= h) continue;
+        for (let rx = 0; rx < g.w; rx++) {
+          if ((bits >> (total - 1 - rx)) & 1) { const xx = px0 + g.ox + rx; if (xx >= 0 && xx < w) mask[yy * w + xx] = 1; }
+        }
+      }
+    }
+    const out = { w, h, mask };
+    rasterCache.set(key, out); return out;
+  }
+
+  class Panel {
+    constructor(canvas) {
+      canvas.width = W * SCALE; canvas.height = H * SCALE;
+      this.ctx = canvas.getContext("2d");
+      this.buf = new Float32Array(W * H * 3);
+      const off = document.createElement("canvas"); off.width = canvas.width; off.height = canvas.height;
+      const o = off.getContext("2d"); o.fillStyle = "#080809"; o.fillRect(0, 0, off.width, off.height);
+      o.fillStyle = "rgba(255,255,255,0.028)";
+      const P = SCALE, SQ = P * 0.74, HS = SQ / 2;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) o.fillRect((x + 0.5) * P - HS, (y + 0.5) * P - HS, SQ, SQ);
+      this.off = off;
+    }
+    px(x, y, r, g, b) { x |= 0; y |= 0; if (x < 0 || x >= W || y < 0 || y >= H) return; const i = (y * W + x) * 3; this.buf[i] = r; this.buf[i + 1] = g; this.buf[i + 2] = b; }
+    pxa(x, y, r, g, b, a) { if (a >= 1) return this.px(x, y, r, g, b); x |= 0; y |= 0; if (x < 0 || x >= W || y < 0 || y >= H) return; const i = (y * W + x) * 3; this.buf[i] = this.buf[i] * (1 - a) + r * a; this.buf[i + 1] = this.buf[i + 1] * (1 - a) + g * a; this.buf[i + 2] = this.buf[i + 2] * (1 - a) + b * a; }
+    drawEls(els) {
+      this.buf.fill(0);
+      for (const el of els || []) {
+        if (el.type === "rectangle") {
+          const w = el.width | 0, h = el.height | 0; if (w <= 0 || h <= 0) continue;
+          const a = ALIGN[el.align] || ALIGN.top_left;
+          const dx = (el.x | 0) - Math.round(w * a[0]), dy = (el.y | 0) - Math.round(h * a[1]);
+          const fill = el.fill || "none";
+          const fc = el.fill_colors && el.fill_colors[0] ? parseColor(el.fill_colors[0]) : null;
+          const fc2 = el.fill_colors && el.fill_colors[1] ? parseColor(el.fill_colors[1]) : fc;
+          // radius per the firmware API (note: the emulator's own renderer ignores it for now)
+          const rad = Math.max(0, Math.min(el.radius | 0, Math.floor(Math.min(w, h) / 2)));
+          const inside = (xx, yy, ww, hh, r) => {
+            if (r <= 0) return true;
+            const cx = xx < r ? r - 0.5 : xx >= ww - r ? ww - r - 0.5 : null;
+            const cy = yy < r ? r - 0.5 : yy >= hh - r ? hh - r - 0.5 : null;
+            if (cx == null || cy == null) return true;
+            const ddx = xx - cx, ddy = yy - cy; return ddx * ddx + ddy * ddy <= (r + 0.2) * (r + 0.2);
+          };
+          const bw = el.border_width == null ? 1 : el.border_width | 0;  // renderer default: 1 px white
+          const innerIn = (xx, yy) => xx >= bw && xx < w - bw && yy >= bw && yy < h - bw && inside(xx - bw, yy - bw, w - 2 * bw, h - 2 * bw, Math.max(0, rad - bw));
+          if (fill !== "none" && fc) for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+            if (!inside(xx, yy, w, h, rad)) continue;
+            let c = fc;
+            if (fill === "gradient_h") c = fc.map((v, i) => v + (fc2[i] - v) * (w > 1 ? xx / (w - 1) : 0));
+            else if (fill === "gradient_v") c = fc.map((v, i) => v + (fc2[i] - v) * (h > 1 ? yy / (h - 1) : 0));
+            this.pxa(dx + xx, dy + yy, c[0], c[1], c[2], c[3]);
+          }
+          if (bw > 0) {
+            const [br, bg, bb, ba] = el.border_color ? parseColor(el.border_color) : [255, 255, 255, 1];
+            for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++)
+              if (inside(xx, yy, w, h, rad) && !innerIn(xx, yy)) this.pxa(dx + xx, dy + yy, br, bg, bb, ba);
+          }
+        } else if (el.type === "text") {
+          const m = rasterize(el.text, el.font || "normal"); if (!m) continue;
+          const [r, g, b, al] = parseColor(el.color);
+          const a = ALIGN[el.align] || ALIGN.top_left;
+          const dx = (el.x | 0) - Math.round(m.w * a[0]), dy = (el.y | 0) - Math.round(m.h * a[1]);
+          for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.mask[y * m.w + x]) this.pxa(dx + x, dy + y, r, g, b, al);
+        }
+      }
+    }
+    render() {
+      const ctx = this.ctx, P = SCALE, SQ = P * 0.74, HS = SQ / 2;
+      ctx.clearRect(0, 0, W * P, H * P); ctx.drawImage(this.off, 0, 0); ctx.globalCompositeOperation = "lighter";
+      const bright = 0.8;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 3;
+        const r = GAMMA_LUT[this.buf[i] | 0] * bright, g = GAMMA_LUT[this.buf[i + 1] | 0] * bright, b = GAMMA_LUT[this.buf[i + 2] | 0] * bright;
+        if (r < 2 && g < 2 && b < 2) continue;
+        const cx = (x + 0.5) * P, cy = (y + 0.5) * P;
+        const gr = ctx.createRadialGradient(cx, cy, 0, cx, cy, P * 0.72);
+        gr.addColorStop(0, `rgba(${r | 0},${g | 0},${b | 0},0.42)`); gr.addColorStop(1, `rgba(${r | 0},${g | 0},${b | 0},0)`);
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, cy, P * 0.72, 0, 7); ctx.fill();
+        const k = 30 * Math.max(r, g, b) / 255;
+        ctx.fillStyle = `rgb(${Math.min(255, r + k) | 0},${Math.min(255, g + k) | 0},${Math.min(255, b + k) | 0})`;
+        ctx.fillRect(cx - HS, cy - HS, SQ, SQ);
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+  }
+
+  /* --- helpers handed to each design's draw(t, u) --- */
+  const hex2 = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0").toUpperCase();
+  const u = {
+    measure: (s, font) => rasterize(s, font).w,
+    adv: (ch, font) => { const f = atlas[font] || atlas.normal, g = f.glyphs[String(ch.codePointAt(0))] || f.glyphs["63"]; return g ? g.adv : 4; },
+    lerp: (c1, c2, k) => { const a = parseColor(c1), b = parseColor(c2); return "#" + hex2(a[0] + (b[0] - a[0]) * k) + hex2(a[1] + (b[1] - a[1]) * k) + hex2(a[2] + (b[2] - a[2]) * k) + hex2((a[3] + (b[3] - a[3]) * k) * 255); },
+    pulse: (t, period) => 0.5 - 0.5 * Math.cos((t / period) * 2 * Math.PI),  // 0..1..0 breathing
+  };
+
+  /* --- build cards and run --- */
+  const grid = document.getElementById("grid"), pick = document.getElementById("pick"), pickText = document.getElementById("pick-text");
+  const designs = window.DESIGNS || [];
+  document.getElementById("count").textContent = designs.length + (designs.length === 1 ? " variant" : " variants");
+  const cards = designs.map((d, i) => {
+    const card = document.createElement("div"); card.className = "glass card";
+    const frame = document.createElement("div"); frame.className = "led-frame";
+    const cv = document.createElement("canvas"); frame.append(cv);
+    const name = document.createElement("div"); name.className = "name"; name.innerHTML = `<span class="num">${i + 1}</span>${d.name}`;
+    const note = document.createElement("div"); note.className = "note"; note.textContent = d.note || "";
+    card.append(frame, name, note); grid.append(card);
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".card.sel").forEach((c) => c.classList.remove("sel"));
+      card.classList.add("sel");
+      pick.classList.remove("hidden");
+      pick.querySelector(".badge-num").textContent = i + 1;
+      pickText.innerHTML = `Your pick: <em>${d.name}</em> — send me this number and I'll build it.`;
+    });
+    return { d, panel: new Panel(cv) };
+  });
+
+  const t0 = performance.now();
+  (function frame() {
+    const t = (performance.now() - t0) / 1000;
+    for (const { d, panel } of cards) {
+      try { panel.drawEls(d.draw(t, u)); } catch (e) { console.error(d.name, e); }
+      panel.render();
+    }
+    requestAnimationFrame(frame);
+  })();
+})();
+</script>
+</body>
+</html>
