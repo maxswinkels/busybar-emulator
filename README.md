@@ -93,13 +93,13 @@ The display panel has two export buttons that produce the files busybar-apps exp
 
 ## The API
 
-Success responses are `{"result":"OK"}` and errors are `{"error","code"}`. Auth mirrors the device: `X-API-Token` is only enforced for non-localhost callers when `BUSY_API_TOKEN` is set. Localhost is always allowed.
+Success responses are `{"result":"OK"}` and errors are `{"error","code"}`. Auth mirrors the device: **localhost/USB is always allowed**; over Wi-Fi a password (set via `BUSY_API_TOKEN` or in the Network tab) is required — as `X-API-Token` for the API, or via the browser's Basic-auth prompt for the web interface. Interactive Swagger UI is served at [`/docs`](http://127.0.0.1:8080/docs) (OpenAPI spec at `/openapi.json`), just like the real bar.
 
 ```bash
 curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/json' -d '{
   "application_name":"cli","priority":50,
   "elements":[{"id":"t","type":"text","text":"HELLO","x":36,"y":8,
-               "font":"extra_large","align":"center","color":"0x2B7FFFFF"}]}'
+               "font":"extra_large","align":"center","color":"#2B7FFFFF"}]}'
 ```
 
 <details>
@@ -128,9 +128,14 @@ curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/js
 | `POST /api/_scenario/offline` | *(emulator)* `{duration_ms}` reset all non-emulator `/api/*` connections for the window; call again to restore early |
 | `POST /api/_scenario/steal` | *(emulator)* `{priority?=99, duration_ms?}` draw a high-priority frame so lower-priority draws get 409 |
 | `POST /api/_scenario/reset` | *(emulator)* clear all scenario overrides |
+| `GET /api/_mirror` | *(emulator)* mirror config `{enabled, host, has_token, status}` (token never returned) |
+| `POST /api/_mirror` | *(emulator)* `{enabled?, host?, token?}` set/save the real-bar target; omit `token` to keep the saved one, `""` clears it |
+| `POST /api/_mirror/test` | *(emulator)* `{host?, token?}` probe a bar (`GET /api/version` + `/api/name`) → `{ok, api_semver?, name?, error?}`; does not persist |
+| `GET /api/_netinfo` | *(emulator)* USB/Wi-Fi API URLs, token state, and Wi-Fi API access flag (HTTP API card) |
+| `POST /api/_netinfo` | *(emulator)* `{wifi_api:bool}` toggle HTTP API access over Wi-Fi (localhost stays reachable) |
 
 ```jsonc
-// text: colour 0xRRGGBBAA (default 0xFFFFFFFF)
+// text: colour #RRGGBBAA (default #FFFFFFFF)
 { "id":"a","type":"text","text":"BUSY","x":36,"y":8,"align":"center",
   "font":"tiny|small|normal|condensed|bold|large|extra_large|global",
   "width":62,"scroll_rate":600,"scroll_start_delay":500,"scroll_repeat_delay":1000 }
@@ -143,7 +148,7 @@ curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/js
 
 // rectangle: fill none|solid|gradient_h|gradient_v
 { "id":"d","type":"rectangle","x":56,"y":9,"width":15,"height":6,
-  "border_width":1,"border_color":"0xFFB000FF","fill":"gradient_h","fill_colors":["0xFF3C3CFF","0x2B7FFFFF"] }
+  "border_width":1,"border_color":"#FFB000FF","fill":"gradient_h","fill_colors":["#FF3C3CFF","#2B7FFFFF"] }
 ```
 
 Common fields: `id` (required), `type` (required), `x`, `y`, `align` (`top_left` … `center` … `bottom_right`), `timeout` (seconds), `display_until` (unix epoch), `display` (`front`/`back`).
@@ -158,12 +163,14 @@ bar = BusyBar("10.0.4.20")   # USB-ethernet or the bar's Wi-Fi IP
 
 Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and asset uploads. It all follows the device's HTTP API.
 
+**Or mirror to hardware while you develop.** In the **Network** tab, set your bar's host, hit **Test**, and toggle **Mirror display to hardware**. The emulator then relays every draw, clear, brightness change and asset upload to the real bar as-is (same app name + priority), so the browser preview and the LEDs render the same frame at once. Your app keeps pointing at the emulator, no `--host` change needed; forwarding is best-effort and never blocks the app. Add an API token if the bar requires one on Wi-Fi.
+
 ## Architecture
 
 ```
 ┌── apps (Python) ──┐   POST /api/display/draw    ┌── server.js (Node) ──┐   SSE   ┌── browser ──┐
-│ clock, weather,   │  ─────────────────────────▶ │ mock BUSY Bar API +  │ ──────▶ │ LED display │
-│ ping, deploy …    │                             │ device state         │         │ (renderer)  │
+│ clock, pixel_fire │  ─────────────────────────▶ │ mock BUSY Bar API +  │ ──────▶ │ LED display │
+│ ping, mac_monitor…│                             │ device state         │         │ (renderer)  │
 └───────────────────┘                             └──────────────────────┘         └─────────────┘
 ```
 
@@ -174,7 +181,7 @@ Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and as
 
 - **Rendering is a faithful approximation.** Assets decode in the browser (1 image pixel = 1 LED), the front display applies gamma 0.35, and the back OLED is grayscale. `busy_tiny` is bitmap-only and falls back to `busy_regular_5px`.
 - **Priority/409 matches the firmware's core rule.** The current owner may redraw at equal priority; a different app needs strictly higher priority to take the screen (else 409). Not emulated: the real device may defer a conflicting request for up to 1.5 s, merges same-app elements by `id`, and expires elements via per-element timeouts.
-- **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, `/api/_apps*` (app runner) and `/api/_scenario*` (scenario simulator) are emulator conveniences.
+- **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, `/api/_apps*` (app runner), `/api/_scenario*` (scenario simulator) and `/api/_mirror*` (hardware mirror) are emulator conveniences.
 
 </details>
 

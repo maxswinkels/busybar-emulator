@@ -102,6 +102,7 @@ main{display:flex;flex-direction:column;gap:16px;width:100%;max-width:688px;marg
 .pill.solid{background:var(--solid);color:var(--solid-ink)}
 .pill.brand{background:var(--brand);color:#fff}
 .pill.good{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success);cursor:default}
+.pill.bad{background:color-mix(in srgb,var(--error) 18%,transparent);color:var(--error);cursor:default}
 
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:14px;border-radius:999px;background:var(--track);cursor:pointer;outline:none;--rng:var(--brand)}
 input[type=range].muted{--rng:var(--n500)}

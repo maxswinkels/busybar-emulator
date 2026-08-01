@@ -10,6 +10,7 @@
  */
 const http = require("http");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
@@ -63,14 +64,11 @@ function scanSounds() {
 const SOUNDS = scanSounds();
 
 /* --------------------------------- apps ---------------------------------- */
+// Hand-written inputs for bundled apps whose args aren't argparse-discoverable.
+// Gallery apps in apps/local auto-discover their argparse options at scan time.
 const APP_PARAMS = {
   "busy_status.py": [{ key: "theme", label: "Theme", type: "select", positional: true, default: "on_air",
     options: ["keep_out","dnd","meeting","on_call","lunch","back_soon","booked","flow","chill_time","on_air","coding","low_social_battery"] }],
-  "ping_monitor.py": [{ key: "target", label: "Target", type: "text", flag: "--target", placeholder: "8.8.8.8" }],
-  "pixel_fire.py": [{ key: "effect", label: "Effect", type: "select", positional: true, default: "fire",
-    options: ["fire", "rain", "plasma"] }],
-  "sound_test.py": [{ key: "sound", label: "Sound", type: "select", positional: true, default: "all",
-    options: ["all", ...Object.keys(SOUNDS).sort()] }],
 };
 
 // Auto-discover an argparse app's options by parsing its own `--help` output,
@@ -319,16 +317,19 @@ function saveState() {
     _saveTimer = null;
     const stor = {}; for (const [k, v] of Object.entries(state.storage)) stor[k] = { type: v.type, b64: v.data ? v.data.toString("base64") : null };
     const ass = {}; for (const [k, v] of Object.entries(state.assets)) ass[k] = { b64: v.buf.toString("base64"), type: v.type };
-    const json = JSON.stringify({ storage: stor, assets: ass });
+    const json = JSON.stringify({ storage: stor, assets: ass, mirror: state.mirror, wifi_api: state.wifi_api, http_token: state.http_token });
     try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); const tmp = STATE_FILE + ".tmp"; fs.writeFileSync(tmp, json); fs.renameSync(tmp, STATE_FILE); } catch (e) { console.warn("[persist] save failed:", e.message); }
   }, 500);
 }
 function loadState(st) {
   try {
     if (!fs.existsSync(STATE_FILE)) return;
-    const { storage, assets } = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    const { storage, assets, mirror, wifi_api, http_token } = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
     if (storage) for (const [k, v] of Object.entries(storage)) st.storage[k] = { type: v.type, data: v.b64 ? Buffer.from(v.b64, "base64") : null };
     if (assets) for (const [k, v] of Object.entries(assets)) st.assets[k] = { buf: Buffer.from(v.b64, "base64"), type: v.type };
+    if (mirror && typeof mirror === "object") st.mirror = { enabled: !!mirror.enabled, host: String(mirror.host || ""), token: String(mirror.token || "") };
+    if (typeof wifi_api === "boolean") st.wifi_api = wifi_api;
+    if (typeof http_token === "string") st.http_token = http_token;
   } catch (e) { console.warn("[persist] could not load state.json, starting empty:", e.message); }
 }
 
@@ -349,6 +350,9 @@ const state = {
   assets: {},
   storage: {},
   log: [],
+  mirror: { enabled: false, host: "", token: "" },   // emulator-only: relay app calls to a real bar
+  wifi_api: true,                                     // "HTTP API access over Wi-Fi" toggle (localhost always allowed)
+  http_token: "",                                     // UI-set password (X-API-Token) for non-localhost callers; env BUSY_API_TOKEN wins
 };
 loadState(state);
 let frameSeq = 1;
@@ -380,6 +384,29 @@ function drawFrame(appName, elements, priority) {
   return true;
 }
 
+// Firmware schema (api_semver 25.0.0) draw contract: every element carries an
+// `id`, and every colour is #RRGGBBAA. The real bar 400s on a missing id or an
+// old-style 0xRRGGBBAA colour, so the emulator rejects them too — "what fails
+// there fails here". Returns an error string, or null when the body is valid.
+const DRAW_ID_RE = /^[a-zA-Z0-9._-]+$/;
+const DRAW_COLOR_RE = /^#[0-9a-fA-F]{8}$/;
+function validateDrawBody(b) {
+  if (b.led_notification_color != null && !DRAW_COLOR_RE.test(b.led_notification_color))
+    return "led_notification_color must be #RRGGBBAA";
+  for (let i = 0; i < b.elements.length; i++) {
+    const el = b.elements[i];
+    if (!el || typeof el !== "object") return `element ${i}: must be an object`;
+    if (typeof el.id !== "string" || !DRAW_ID_RE.test(el.id)) return `element ${i}: 'id' required (^[a-zA-Z0-9._-]+$)`;
+    if (el.color != null && !DRAW_COLOR_RE.test(el.color)) return `element '${el.id}': color must be #RRGGBBAA`;
+    if (el.border_color != null && !DRAW_COLOR_RE.test(el.border_color)) return `element '${el.id}': border_color must be #RRGGBBAA`;
+    if (el.fill_colors != null) {
+      if (!Array.isArray(el.fill_colors)) return `element '${el.id}': fill_colors must be an array`;
+      for (const c of el.fill_colors) if (!DRAW_COLOR_RE.test(c)) return `element '${el.id}': fill_colors must be #RRGGBBAA`;
+    }
+  }
+  return null;
+}
+
 /* ------------------------------ SSE clients ------------------------------ */
 const clients = new Set();
 function uptimeStr(s) { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60; return `${String(d).padStart(2, "0")}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(ss).padStart(2, "0")}s`; }
@@ -391,11 +418,298 @@ function snapshot() {
     log: state.log.slice(0, 18),
     app: appStatus(),
     scenario: { offline_until: scenario.offline_until, power_state: scenario.power_state },
+    mirror: mirrorInfo(),
   };
 }
 function broadcast() { const data = `event: state\ndata: ${JSON.stringify(snapshot())}\n\n`; for (const r of clients) { try { r.write(data); } catch (_) {} } }
 function emit(ev, p) { const data = `event: ${ev}\ndata: ${JSON.stringify(p)}\n\n`; for (const r of clients) { try { r.write(data); } catch (_) {} } }
 function logCall(method, p, note) { state.log.unshift({ t: Date.now(), method, path: p, note: note || "" }); if (state.log.length > 30) state.log.length = 30; }
+
+/* ----------------------- hardware mirror (emulator-only) ----------------- */
+// When enabled, relay the app-facing mutating calls (draw, clear, brightness,
+// assets, audio) to a real BUSY Bar over HTTP so the browser preview and the
+// hardware render the same thing. Best-effort: failures update the status pill
+// but never touch the local response — the emulator stays source of truth here.
+const MIRROR_TIMEOUT = 2500;
+const mirrorStatus = { ok: null, msg: "off", t: Date.now() };
+let mirrorBcastTimer = null;
+function setMirrorStatus(ok, msg) {
+  mirrorStatus.ok = ok; mirrorStatus.msg = msg; mirrorStatus.t = Date.now();
+  if (mirrorBcastTimer) return;
+  mirrorBcastTimer = setTimeout(() => { mirrorBcastTimer = null; broadcast(); }, 120);
+}
+function mirrorInfo() {
+  return { enabled: state.mirror.enabled, host: state.mirror.host, has_token: !!state.mirror.token,
+    status: { ok: mirrorStatus.ok, msg: mirrorStatus.msg, t: mirrorStatus.t } };
+}
+// "10.0.4.20" | "10.0.4.20:8080" | "http://host/" → { hostname, port }. Bare host → firmware default :80.
+function parseHostStr(raw) {
+  const s = String(raw || "").replace(/^https?:\/\//, "").replace(/\/+$/, "").trim();
+  if (!s) return null;
+  const i = s.lastIndexOf(":");
+  if (i > -1 && /^\d+$/.test(s.slice(i + 1))) { const h = s.slice(0, i); return h ? { hostname: h, port: Number(s.slice(i + 1)) } : null; }
+  return { hostname: s, port: 80 };
+}
+function isSelfTarget(t) {
+  return (t.hostname === "127.0.0.1" || t.hostname === "localhost" || t.hostname === "::1" || t.hostname === "0.0.0.0") && t.port === PORT;
+}
+function cleanQuery(q) { const o = {}; for (const k in q) if (q[k] !== undefined && q[k] !== null) o[k] = q[k]; return o; }
+// Normalize a draw body for a real bar: force application_name (firmware requires
+// it and ignores the emulator-only app_id alias). Colors already match the
+// firmware's #RRGGBBAA form (validateDrawBody enforces it), so no translation.
+function toBarDraw(b, appName) {
+  const out = Object.assign({}, b, { application_name: appName });
+  delete out.app_id;
+  return out;
+}
+// One outbound request. onDone fires exactly once, on completion or failure.
+function mirrorRequest(method, apiPath, opts, onDone) {
+  const done = onDone || (() => {});
+  const t = parseHostStr(state.mirror.host);
+  if (!t) { setMirrorStatus(false, "no host set"); return done(); }
+  if (isSelfTarget(t)) { setMirrorStatus(false, "host points at the emulator itself"); return done(); }
+  const { query, body, ctype } = opts || {};
+  const qs = query ? "?" + new URLSearchParams(cleanQuery(query)).toString() : "";
+  const headers = {};
+  if (body != null) { headers["Content-Type"] = ctype || "application/json"; headers["Content-Length"] = Buffer.byteLength(body); }
+  if (state.mirror.token) headers["X-API-Token"] = state.mirror.token;
+  let settled = false;
+  const finish = (ok, msg) => { if (settled) return; settled = true; setMirrorStatus(ok, msg); done(); };
+  const rq = http.request({ hostname: t.hostname, port: t.port, path: apiPath + qs, method, headers, timeout: MIRROR_TIMEOUT }, (resp) => {
+    resp.resume();
+    resp.on("end", () => finish(resp.statusCode < 400, `${method} ${apiPath} → ${resp.statusCode}`));
+    resp.on("error", () => finish(false, "response error"));
+  });
+  rq.on("error", (e) => finish(false, e.code || e.message || "request error"));
+  rq.on("timeout", () => rq.destroy(new Error("timeout")));
+  if (body != null) rq.write(body);
+  rq.end();
+}
+// Display channel (draw + clear): coalesce to at most one in-flight + one latest
+// pending, so a fast redraw loop against a slow/dead bar can't back up sockets.
+const displayFlight = { busy: false, next: null };
+function mirrorDisplay(method, apiPath, opts) {
+  if (!state.mirror.enabled) return;
+  if (displayFlight.busy) { displayFlight.next = { method, apiPath, opts }; return; }
+  displayFlight.busy = true;
+  mirrorRequest(method, apiPath, opts, () => {
+    displayFlight.busy = false;
+    const n = displayFlight.next; displayFlight.next = null;
+    if (n && state.mirror.enabled) mirrorDisplay(n.method, n.apiPath, n.opts);
+  });
+}
+// Low-frequency channel (brightness, assets, audio): plain fire-and-forget.
+function mirrorCall(method, apiPath, opts) {
+  if (!state.mirror.enabled) return;
+  mirrorRequest(method, apiPath, opts, null);
+}
+// Reachability probe for POST /api/_mirror/test — a dry run that never persists.
+function mirrorHttpGet(t, apiPath, token) {
+  return new Promise((resolve) => {
+    const headers = {}; if (token) headers["X-API-Token"] = token;
+    const rq = http.request({ hostname: t.hostname, port: t.port, path: apiPath, method: "GET", headers, timeout: MIRROR_TIMEOUT }, (resp) => {
+      const chunks = []; resp.on("data", (c) => chunks.push(c));
+      resp.on("end", () => { let j = {}; try { j = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch (_) {} resolve({ status: resp.statusCode, json: j }); });
+      resp.on("error", () => resolve({ error: "response error" }));
+    });
+    rq.on("error", (e) => resolve({ error: e.code || e.message || "request error" }));
+    rq.on("timeout", () => { rq.destroy(); resolve({ error: "timeout" }); });
+    rq.end();
+  });
+}
+async function mirrorProbe(host, token) {
+  const t = parseHostStr(host);
+  if (!t) return { ok: false, error: "invalid host" };
+  if (isSelfTarget(t)) return { ok: false, error: "that is the emulator itself" };
+  const [ver, nm] = await Promise.all([
+    mirrorHttpGet(t, "/api/version", token),
+    mirrorHttpGet(t, "/api/name", token),
+  ]);
+  if (ver.error) return { ok: false, error: ver.error };
+  if (ver.status >= 400) return { ok: false, error: `HTTP ${ver.status}`, http_status: ver.status };
+  return { ok: true, http_status: ver.status, api_semver: (ver.json && ver.json.api_semver) || null, name: (nm.json && nm.json.name) || null };
+}
+// Non-internal IPv4 addresses the emulator's HTTP API is reachable on (it binds
+// all interfaces), i.e. the "over Wi-Fi/LAN" URLs shown in the Network tab.
+function lanAddresses() {
+  const out = [];
+  const ifs = os.networkInterfaces();
+  for (const name of Object.keys(ifs)) for (const ni of ifs[name] || []) {
+    if (ni && ni.family === "IPv4" && !ni.internal) out.push(ni.address);
+  }
+  return out;
+}
+// Payload for the Network tab's HTTP API card. token_required reflects the
+// effective password; password_env means it is fixed by BUSY_API_TOKEN (UI can't change it).
+function netinfoBody() {
+  return { port: PORT, addresses: lanAddresses(), token_required: !!effectiveToken(), password_env: !!TOKEN, wifi_api: state.wifi_api, api_semver: API_SEMVER };
+}
+// /docs serves Swagger UI (like the real bar), backed by the emulator's own
+// OpenAPI spec at /openapi.json. The Swagger UI assets are the only runtime
+// external dependency, and only for this docs page.
+function swaggerPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BUSY Bar Emulator · API</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+<style>body{margin:0}.swagger-ui .topbar{display:none}</style></head>
+<body><div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+<script>window.onload=function(){window.ui=SwaggerUIBundle({url:'/openapi.json',dom_id:'#swagger-ui',deepLinking:true,tryItOutEnabled:true,defaultModelsExpandDepth:0})};</script>
+</body></html>`;
+}
+// OpenAPI 3 spec for the emulator's own API (firmware-faithful routes + the
+// emulator-only /api/_* conveniences). Served at /openapi.json for Swagger UI.
+function openapiSpec() {
+  const servers = [{ url: `http://127.0.0.1:${PORT}`, description: "USB (localhost)" }]
+    .concat(lanAddresses().map((a) => ({ url: `http://${a}:${PORT}`, description: "Wi-Fi / LAN" })));
+  const color = { type: "string", pattern: "^#[0-9A-Fa-f]{8}$", example: "#2B7FFFFF", description: "#RRGGBBAA" };
+  const withBase = (props, required) => ({ allOf: [{ $ref: "#/components/schemas/ElementBase" }, { type: "object", required: required || [], properties: props }] });
+  const jsonBody = (ref) => ({ required: true, content: { "application/json": { schema: { $ref: ref } } } });
+  const bin = { required: true, content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } };
+  const objBody = (props) => ({ content: { "application/json": { schema: { type: "object", properties: props } } } });
+  const R = (desc, ref) => ({ description: desc, content: { "application/json": { schema: { $ref: ref } } } });
+  const okR = R("OK", "#/components/schemas/Success");
+  const errR = R("Error", "#/components/schemas/Error");
+  const dataR = (desc, props) => ({ description: desc, content: { "application/json": { schema: { type: "object", properties: props } } } });
+  const qp = (name, description, opts) => Object.assign({ name, in: "query", description, schema: { type: "string" } }, opts || {});
+
+  const paths = {
+    "/api/display/draw": {
+      post: { tags: ["Display"], summary: "Draw a frame", requestBody: jsonBody("#/components/schemas/DisplayElements"),
+        responses: { "200": okR, "400": errR, "409": R("Priority too low", "#/components/schemas/Error") } },
+      delete: { tags: ["Display"], summary: "Clear the display", parameters: [qp("application_name", "omit to clear all")], responses: { "200": okR } },
+    },
+    "/api/display/brightness": {
+      get: { tags: ["Display"], summary: "Get brightness", responses: { "200": dataR("brightness", { value: { type: "string", example: "80", description: "\"auto\" or \"0\"-\"100\"" } }) } },
+      post: { tags: ["Display"], summary: "Set brightness", parameters: [qp("value", "auto or 0-100", { required: true })], responses: { "200": okR, "400": errR } },
+    },
+    "/api/audio/play": {
+      post: { tags: ["Audio"], summary: "Play a sound", requestBody: jsonBody("#/components/schemas/PlayAudio"), responses: { "200": okR, "400": errR } },
+      delete: { tags: ["Audio"], summary: "Stop playback", responses: { "200": okR } },
+    },
+    "/api/audio/volume": {
+      get: { tags: ["Audio"], summary: "Get volume", responses: { "200": dataR("volume", { volume: { type: "integer", example: 60 } }) } },
+      post: { tags: ["Audio"], summary: "Set volume", parameters: [qp("volume", "0-100", { required: true }), qp("silent", "")], responses: { "200": okR, "400": errR } },
+    },
+    "/api/assets/upload": {
+      post: { tags: ["Assets"], summary: "Upload asset bytes", parameters: [qp("application_name", "", { required: true }), qp("file", "filename, e.g. logo.png", { required: true })], requestBody: bin, responses: { "200": okR, "400": errR } },
+      delete: { tags: ["Assets"], summary: "Delete an app's assets", parameters: [qp("application_name", "", { required: true })], responses: { "200": okR, "404": errR } },
+    },
+    "/api/storage/write": { post: { tags: ["Storage"], summary: "Write a file", parameters: [qp("path", "", { required: true })], requestBody: bin, responses: { "200": okR } } },
+    "/api/storage/read": { get: { tags: ["Storage"], summary: "Read a file", parameters: [qp("path", "", { required: true })], responses: { "200": { description: "file bytes" }, "400": errR } } },
+    "/api/storage/list": { get: { tags: ["Storage"], summary: "List files", parameters: [qp("path", "prefix")], responses: { "200": okR } } },
+    "/api/storage/remove": { delete: { tags: ["Storage"], summary: "Remove a file", parameters: [qp("path", "", { required: true })], responses: { "200": okR } } },
+    "/api/busy/snapshot": {
+      get: { tags: ["BUSY timer"], summary: "Get snapshot", responses: { "200": okR } },
+      put: { tags: ["BUSY timer"], summary: "Set snapshot", requestBody: objBody({ snapshot: { type: "object" }, snapshot_timestamp_ms: { type: "integer" } }), responses: { "200": okR, "400": errR } },
+    },
+    "/api/name": {
+      get: { tags: ["Device"], summary: "Get device name", responses: { "200": dataR("name", { name: { type: "string", example: "BUSY-EMULATOR" } }) } },
+      post: { tags: ["Device"], summary: "Set device name", requestBody: objBody({ name: { type: "string" } }), responses: { "200": okR, "400": errR } },
+    },
+    "/api/time": { get: { tags: ["Device"], summary: "Get time", responses: { "200": dataR("time", { timestamp: { type: "string", format: "date-time" } }) } } },
+    "/api/status": { get: { tags: ["Device"], summary: "Device status", responses: { "200": dataR("nested status groups", { device: { type: "object" }, firmware: { type: "object" }, system: { type: "object" }, power: { type: "object" } }) } } },
+    "/api/input": { post: { tags: ["Device"], summary: "Press a button", parameters: [qp("key", "up|down|ok|back|start|busy|custom|off|apps|settings", { required: true })], responses: { "200": okR, "400": errR } } },
+    "/api/version": { get: { tags: ["Meta"], summary: "API version", responses: { "200": dataR("version", { api_semver: { type: "string", example: API_SEMVER } }) } } },
+    "/api/transport": { get: { tags: ["Meta"], summary: "Transport (usb|wifi)", responses: { "200": dataR("transport", { type: { type: "string", enum: ["usb", "wifi"] } }) } } },
+    "/api/access": { get: { tags: ["Meta"], summary: "Auth mode", responses: { "200": dataR("access", { mode: { type: "string", enum: ["disabled", "key"] }, key_valid: { type: "boolean" } }) } } },
+    "/api/_apps": { get: { tags: ["Emulator"], summary: "List example apps + runner state", responses: { "200": okR } } },
+    "/api/_apps/start": { post: { tags: ["Emulator"], summary: "Start an app", requestBody: objBody({ name: { type: "string" }, args: { type: "array", items: { type: "string" } } }), responses: { "200": okR, "404": errR } } },
+    "/api/_apps/stop": { post: { tags: ["Emulator"], summary: "Stop the running app", responses: { "200": okR } } },
+    "/api/_scenario": { get: { tags: ["Emulator"], summary: "Scenario state", responses: { "200": okR } } },
+    "/api/_scenario/power": { post: { tags: ["Emulator"], summary: "Set battery / charge state", requestBody: objBody({ battery_charge: { type: "integer" }, state: { type: "string", enum: ["charging", "discharging", "charged"] } }), responses: { "200": okR, "400": errR } } },
+    "/api/_scenario/offline": { post: { tags: ["Emulator"], summary: "Drop the connection for a window", requestBody: objBody({ duration_ms: { type: "integer" } }), responses: { "200": okR } } },
+    "/api/_scenario/steal": { post: { tags: ["Emulator"], summary: "Draw a high-priority frame", requestBody: objBody({ priority: { type: "integer" }, duration_ms: { type: "integer" } }), responses: { "200": okR, "409": errR } } },
+    "/api/_scenario/reset": { post: { tags: ["Emulator"], summary: "Clear scenario overrides", responses: { "200": okR } } },
+    "/api/_mirror": {
+      get: { tags: ["Emulator"], summary: "Mirror config", responses: { "200": okR } },
+      post: { tags: ["Emulator"], summary: "Set mirror config", requestBody: objBody({ enabled: { type: "boolean" }, host: { type: "string" }, token: { type: "string" } }), responses: { "200": okR, "400": errR } },
+    },
+    "/api/_mirror/test": { post: { tags: ["Emulator"], summary: "Probe a real bar", requestBody: objBody({ host: { type: "string" }, token: { type: "string" } }), responses: { "200": okR, "400": errR } } },
+    "/api/_netinfo": {
+      get: { tags: ["Emulator"], summary: "USB/Wi-Fi URLs + API state", responses: { "200": okR } },
+      post: { tags: ["Emulator"], summary: "Toggle Wi-Fi API access / set password (localhost only)", requestBody: objBody({ wifi_api: { type: "boolean" }, password: { type: "string", description: "X-API-Token for non-localhost callers; \"\" clears" } }), responses: { "200": okR, "400": errR, "403": errR, "409": errR } },
+    },
+    "/api/_animations": { get: { tags: ["Emulator"], summary: "Animation manifest", responses: { "200": okR } } },
+    "/api/_sounds": { get: { tags: ["Emulator"], summary: "Stock-sound manifest", responses: { "200": okR } } },
+  };
+
+  return {
+    openapi: "3.0.3",
+    info: {
+      title: "BUSY Bar Emulator", version: API_SEMVER,
+      description: "Local emulator of the Flipper BUSY Bar HTTP API. Routes, verbs, response shapes and error codes match the real firmware, so an app written here runs unchanged on hardware by swapping the host. Success is `{\"result\":\"OK\"}`; errors are `{\"error\",\"code\"}`. `X-API-Token` is only enforced for non-localhost callers when `BUSY_API_TOKEN` is set; localhost is always allowed.",
+    },
+    servers,
+    tags: [{ name: "Display" }, { name: "Audio" }, { name: "Assets" }, { name: "Storage" }, { name: "BUSY timer" }, { name: "Device" }, { name: "Meta" }, { name: "Emulator", description: "Emulator-only conveniences (underscore prefix)" }],
+    paths,
+    components: {
+      schemas: {
+        Success: { type: "object", properties: { result: { type: "string", example: "OK" } } },
+        Error: { type: "object", properties: { error: { type: "string" }, code: { type: "integer" } } },
+        ElementBase: {
+          type: "object", required: ["id", "type"],
+          properties: {
+            id: { type: "string", example: "a" },
+            type: { type: "string", enum: ["text", "image", "animation", "countdown", "rectangle"] },
+            x: { type: "integer", default: 0 }, y: { type: "integer", default: 0 },
+            align: { type: "string", enum: ["top_left", "top_mid", "top_right", "mid_left", "center", "mid_right", "bottom_left", "bottom_mid", "bottom_right"] },
+            display: { type: "string", enum: ["front", "back"], default: "front" },
+            timeout: { type: "integer", description: "seconds; mutually exclusive with display_until" },
+            display_until: { type: "integer", description: "unix seconds" },
+          },
+        },
+        TextElement: withBase({
+          text: { type: "string", example: "HELLO" },
+          font: { type: "string", enum: ["tiny", "small", "normal", "condensed", "bold", "large", "extra_large", "global"], default: "normal" },
+          color, width: { type: "integer" },
+          scroll_rate: { type: "integer", description: "pixel columns per minute (0 = off)" },
+          scroll_start_delay: { type: "integer" }, scroll_repeat_delay: { type: "integer" },
+        }, ["text"]),
+        ImageElement: withBase({
+          path: { type: "string", description: "uploaded asset path (bare logo.png resolves in the app's namespace)" },
+          stock_path: { type: "string", description: "builtin, e.g. faces/emoji-grinning or sun|cloud|heart|check|bolt" },
+          opacity: { type: "integer", minimum: 0, maximum: 100, default: 100 }, color,
+        }),
+        AnimationElement: withBase({
+          stock_path: { type: "string", description: "device animation folder, e.g. coding_72x16 (canonical)" },
+          name: { type: "string", description: "legacy alias for stock_path" },
+          section: { type: "string" }, loop: { type: "boolean" },
+          opacity: { type: "integer", minimum: 0, maximum: 100, default: 100 },
+        }),
+        CountdownElement: withBase({
+          timestamp: { type: "string", pattern: "^[0-9]+$", description: "unix seconds (a number in a string)" },
+          direction: { type: "string", enum: ["time_left", "time_since"] },
+          show_hours: { type: "string", enum: ["when_non_zero", "always"] }, color,
+        }, ["timestamp", "direction"]),
+        RectangleElement: withBase({
+          width: { type: "integer", minimum: 1 }, height: { type: "integer", minimum: 1 }, radius: { type: "integer", minimum: 0 },
+          fill: { type: "string", enum: ["none", "solid", "gradient_h", "gradient_v"], default: "none" },
+          fill_colors: { type: "array", items: color, minItems: 1, maxItems: 2 },
+          border_width: { type: "integer", default: 1 }, border_color: color,
+        }, ["width", "height"]),
+        DisplayElements: {
+          type: "object", required: ["elements"],
+          description: "Requires one of application_name or app_id.",
+          properties: {
+            application_name: { type: "string", pattern: "^[a-zA-Z0-9._-]+$", example: "cli" },
+            app_id: { type: "string", description: "accepted alias for application_name (community scripts); one of the two is required" },
+            priority: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            led_notification_color: color,
+            elements: {
+              type: "array", minItems: 1, items: { oneOf: [
+                { $ref: "#/components/schemas/TextElement" }, { $ref: "#/components/schemas/ImageElement" },
+                { $ref: "#/components/schemas/AnimationElement" }, { $ref: "#/components/schemas/CountdownElement" },
+                { $ref: "#/components/schemas/RectangleElement" },
+              ] },
+            },
+          },
+        },
+        PlayAudio: { type: "object", required: ["application_name"], properties: { application_name: { type: "string" }, path: { type: "string" }, stock_path: { type: "string" } } },
+      },
+    },
+  };
+}
 
 /* ------------------------------- helpers -------------------------------- */
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-API-Token, X-API-Sem-Ver", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS" };
@@ -416,7 +730,16 @@ function readBody(req) {
 }
 async function readJson(req) { const b = await readBody(req); return b.length ? JSON.parse(b.toString("utf8")) : {}; }
 function isLocal(req) { const a = req.socket.remoteAddress || ""; return a === "::1" || a.includes("127.0.0.1"); }
-function authed(req) { if (!TOKEN) return true; if (isLocal(req)) return true; return req.headers["x-api-token"] === TOKEN; }
+// Env BUSY_API_TOKEN wins (immutable); otherwise the UI-set password applies.
+function effectiveToken() { return TOKEN || state.http_token || ""; }
+// Password from an HTTP Basic header (any username; password half is the token),
+// so a browser opening the web UI over Wi-Fi can authenticate via the native prompt.
+function basicPassword(req) {
+  const m = /^Basic\s+(.+)$/i.exec(req.headers["authorization"] || "");
+  if (!m) return null;
+  try { const dec = Buffer.from(m[1], "base64").toString("utf8"); const i = dec.indexOf(":"); return i >= 0 ? dec.slice(i + 1) : dec; } catch (_) { return null; }
+}
+function authed(req) { const tok = effectiveToken(); if (!tok) return true; if (isLocal(req)) return true; return req.headers["x-api-token"] === tok || basicPassword(req) === tok; }
 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".ttf": "font/ttf", ".woff2": "font/woff2", ".json": "application/json" };
 // Decode percent-escapes and resolve inside root (frame files may contain spaces).
@@ -447,6 +770,18 @@ const server = http.createServer(async (req, res) => {
   if (scenario.offline_until > Date.now() && p.startsWith("/api/") && !p.startsWith("/api/_")) { req.socket.destroy(); return; }
   if (method === "OPTIONS") { send(res, 204, {}); return; }
 
+  // Web-interface password over Wi-Fi: the device asks for a password to open the
+  // web UI when connected via Wi-Fi. Non-localhost requests for the web interface
+  // (everything but /api/*, which has its own X-API-Token gate) get a Basic-auth
+  // challenge when a password is set; localhost/USB is always allowed, no prompt.
+  if (!p.startsWith("/api/") && effectiveToken() && !isLocal(req) && !authed(req)) {
+    res.writeHead(401, Object.assign({ "WWW-Authenticate": 'Basic realm="BUSY Bar Emulator"', "Content-Type": "text/plain; charset=utf-8" }, CORS));
+    return res.end("Password required to access the web interface over Wi-Fi.");
+  }
+
+  // API docs — Swagger UI at /docs (mirrors the real bar), spec at /openapi.json. No auth.
+  if (method === "GET" && (p === "/docs" || p === "/docs/")) { res.writeHead(200, Object.assign({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" }, CORS)); return res.end(swaggerPage()); }
+  if (method === "GET" && p === "/openapi.json") return send(res, 200, openapiSpec());
   // static + stream (no auth); UI tab paths (emulator-only) fall back to the SPA
   if (method === "GET" && (p === "/" || p === "/index.html" || /^\/(network|firmware|settings|draw-tool|apps|scenarios)$/.test(p))) return serveStatic(res, fs.existsSync(path.join(DIST, "index.html")) ? path.join(DIST, "index.html") : path.join(PUBLIC, "index.html"));
   if (method === "GET" && p.startsWith("/static/")) return serveStatic(res, staticPath(DIST, p.replace(/^\//, "")));
@@ -471,6 +806,9 @@ const server = http.createServer(async (req, res) => {
     if (!/^\d+$/.test(major)) return fail(res, 400, "bad X-API-Sem-Ver");
     if (major !== "25") return fail(res, 405, "Incompatible API version");
   }
+  // Emulated "HTTP API access over Wi-Fi" switch: when off, block the device API
+  // for non-localhost callers (localhost/USB and emulator-only routes stay reachable).
+  if (!state.wifi_api && p.startsWith("/api/") && !/\/api\/(version|access|transport)/.test(p) && !p.startsWith("/api/_") && !isLocal(req)) return fail(res, 403, "HTTP API disabled over Wi-Fi");
   // auth gate (always-allow version/access/transport)
   if (p.startsWith("/api/") && !/\/api\/(version|access|transport)/.test(p) && !authed(req)) return fail(res, 403, "Forbidden");
 
@@ -485,6 +823,12 @@ const server = http.createServer(async (req, res) => {
       if (elements.length > 100) return fail(res, 400, "Elements number limit exceeded");
       let priority = b.priority == null ? 50 : b.priority;
       if (typeof priority !== "number" || priority < 1 || priority > 100) return fail(res, 400, "Bad request: priority 1-100");
+      const drawErr = validateDrawBody(b);
+      if (drawErr) return fail(res, 400, "Bad request: " + drawErr);
+      // Build the mirrored copy from the app's original payload (bare asset paths,
+      // pre-rewrite) so the bar does its own namespacing; toBarDraw forces
+      // application_name since firmware ignores the emulator-only app_id alias.
+      const fwdBody = state.mirror.enabled ? JSON.stringify(toBarDraw(b, appName)) : null;
       // Firmware resolves image paths inside the drawing app's asset namespace
       // (busylib docs: upload filename="logo.png", then draw path="logo.png").
       // Rewrite bare paths to the namespaced asset key; full keys keep working.
@@ -492,6 +836,7 @@ const server = http.createServer(async (req, res) => {
         if (el && el.type === "image" && el.path && state.assets[`${appName}/${el.path}`]) el.path = `${appName}/${el.path}`;
       }
       if (!drawFrame(appName, elements, priority)) return fail(res, 409, "Not drawn due to low priority");
+      mirrorDisplay("POST", "/api/display/draw", { body: fwdBody });
       if (b.led_notification_color) emit("led", { color: b.led_notification_color });
       logCall("POST", p, `${appName} · ${elements.length} el · pri ${priority}`); broadcast(); return ok(res);
     }
@@ -500,6 +845,7 @@ const server = http.createServer(async (req, res) => {
       if (!app || state.frame.application_name === app || !state.frame.elements.length) {
         state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 };
       }
+      mirrorDisplay("DELETE", "/api/display/draw", { query: app ? { application_name: app } : null });
       logCall("DELETE", p, app || "all"); broadcast(); return ok(res);
     }
     if (p === "/api/display/brightness") {
@@ -508,6 +854,7 @@ const server = http.createServer(async (req, res) => {
         const v = q.value;
         if (v === "auto") state.brightness = "auto";
         else { const n = Number(v); if (!(n >= 0 && n <= 100)) return fail(res, 400, "Bad request: value 0-100 or auto"); state.brightness = n; }
+        mirrorCall("POST", "/api/display/brightness", { query: { value: v } });
         logCall("POST", p, `value ${v}`); broadcast(); return ok(res);
       }
     }
@@ -518,6 +865,7 @@ const server = http.createServer(async (req, res) => {
       if (!b.application_name) return fail(res, 400, "Missing application_name");
       if (b.path && b.stock_path) return fail(res, 400, "Both path and stock_path are defined");
       if (!b.path && !b.stock_path) return fail(res, 400, "Missing path or stock_path");
+      mirrorCall("POST", "/api/audio/play", { body: JSON.stringify(b) });
       logCall("POST", p, b.stock_path || b.path || "");
       let url = null;
       // firmware resolves the basename after the last "/" incl. extension; also accept the bare name (emulator-only)
@@ -531,10 +879,10 @@ const server = http.createServer(async (req, res) => {
       // firmware 404s an unplayable file; no stock sounds are bundled, so unresolved paths 200 + beep fallback (emulator-only)
       emit("beep", { url, path: b.path || null, stock_path: b.stock_path || null }); return ok(res);
     }
-    if (p === "/api/audio/play" && method === "DELETE") { logCall("DELETE", p, "stop"); emit("beep", { stop: true }); return ok(res); }
+    if (p === "/api/audio/play" && method === "DELETE") { mirrorCall("DELETE", "/api/audio/play", {}); logCall("DELETE", p, "stop"); emit("beep", { stop: true }); return ok(res); }
     if (p === "/api/audio/volume") {
       if (method === "GET") { logCall("GET", p); return send(res, 200, { volume: state.volume }); }
-      if (method === "POST") { const n = Number(q.volume); if (!(n >= 0 && n <= 100)) return fail(res, 400, "Bad request: volume 0-100"); state.volume = n; logCall("POST", p, `vol ${n}`); broadcast(); return ok(res); }
+      if (method === "POST") { const n = Number(q.volume); if (!(n >= 0 && n <= 100)) return fail(res, 400, "Bad request: volume 0-100"); state.volume = n; mirrorCall("POST", "/api/audio/volume", { query: { volume: q.volume, silent: q.silent } }); logCall("POST", p, `vol ${n}`); broadcast(); return ok(res); }
     }
 
     /* ---- assets (raw octet-stream, ?file=) ---- */
@@ -549,12 +897,14 @@ const server = http.createServer(async (req, res) => {
       const type = { png: "image/png", gif: "image/gif", jpg: "image/jpeg", jpeg: "image/jpeg",
         wav: "audio/wav", mp3: "audio/mpeg", ogg: "audio/ogg" }[(ext || "").toLowerCase()] || "application/octet-stream";
       state.assets[`${app}/${file}`] = { buf, type };
+      mirrorCall("POST", "/api/assets/upload", { query: { application_name: app, file }, body: buf, ctype: "application/octet-stream" });
       saveState(); logCall("POST", p, `${app}/${file} · ${buf.length}b`); return ok(res);
     }
     if (p === "/api/assets/upload" && method === "DELETE") {
       const app = q.application_name; if (!app) return fail(res, 400, "application_name required");
       let n = 0; for (const k of Object.keys(state.assets)) if (k.startsWith(app + "/")) { delete state.assets[k]; n++; }
       if (!n) return fail(res, 404, "Assets not found");
+      mirrorCall("DELETE", "/api/assets/upload", { query: { application_name: app } });
       saveState(); logCall("DELETE", p, app); return ok(res);
     }
 
@@ -616,7 +966,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === "/api/version" && method === "GET") { logCall("GET", p); return send(res, 200, { api_semver: API_SEMVER }); }
     if (p === "/api/transport" && method === "GET") { return send(res, 200, { type: isLocal(req) ? "usb" : "wifi" }); }
-    if (p === "/api/access") { if (method === "GET") return send(res, 200, { mode: TOKEN ? "key" : "disabled", key_valid: !TOKEN }); if (method === "POST") { logCall("POST", p, q.mode); return ok(res); } }
+    if (p === "/api/access") { if (method === "GET") { const tok = effectiveToken(); return send(res, 200, { mode: tok ? "key" : "disabled", key_valid: !tok }); } if (method === "POST") { logCall("POST", p, q.mode); return ok(res); } }
     if (p === "/api/input" && method === "POST") { const KEYS = ["up", "down", "ok", "back", "start", "busy", "custom", "off", "apps", "settings"]; if (!KEYS.includes(q.key)) return fail(res, 400, "bad key"); logCall("POST", p, q.key); emit("input", { key: q.key }); return ok(res); }
     if (p === "/api/log_dump" && method === "POST") { logCall("POST", p, q.filename || ""); return ok(res, { path: `/ext/logs/${q.filename || "dump"}.txt` }); }
 
@@ -654,6 +1004,9 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/_apps/stop" && method === "POST") {
       logCall("POST", p, "stop");
       const stopped = await new Promise((resolve) => { appOpChain = appOpChain.then(async () => { resolve(await stopApp()); }); });
+      // Release the screen on an explicit stop, so the runner doesn't rely on the
+      // app clearing its own frame on exit (standalone apps may not handle SIGTERM).
+      if (state.frame.elements.length) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; broadcast(); }
       return ok(res, { stopped });
     }
 
@@ -696,8 +1049,8 @@ const server = http.createServer(async (req, res) => {
         duration = n;
       }
       const elements = [
-        { id: "s1", type: "rectangle", x: 0, y: 0, width: 72, height: 16, border_width: 1, border_color: "0xFF3C3CFF", fill: "none", display: "front" },
-        { id: "s2", type: "text", text: `PRIORITY ${priority}`, x: 36, y: 8, font: "small", color: "0xFF3C3CFF", align: "center", display: "front" },
+        { id: "s1", type: "rectangle", x: 0, y: 0, width: 72, height: 16, border_width: 1, border_color: "#FF3C3CFF", fill: "none", display: "front" },
+        { id: "s2", type: "text", text: `PRIORITY ${priority}`, x: 36, y: 8, font: "small", color: "#FF3C3CFF", align: "center", display: "front" },
       ];
       if (!drawFrame(STEAL_APP, elements, priority)) return fail(res, 409, "Not drawn due to low priority");
       clearTimeout(stealTimer); stealTimer = null;
@@ -712,6 +1065,51 @@ const server = http.createServer(async (req, res) => {
       if (state.frame.application_name === STEAL_APP) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; }
       scenario.power_state = "discharging"; state.battery_charge = 100;
       logCall("POST", p, "reset"); broadcast(); return ok(res);
+    }
+
+    /* ---- emulator: network info (HTTP API card) ---- */
+    if (p === "/api/_netinfo" && method === "GET") { return send(res, 200, netinfoBody()); }
+    if (p === "/api/_netinfo" && method === "POST") {
+      if (!isLocal(req)) return fail(res, 403, "settings can only be changed locally");   // like the device's on-box/USB config
+      const b = await readJson(req);
+      const notes = [];
+      if (b.wifi_api !== undefined) { if (typeof b.wifi_api !== "boolean") return fail(res, 400, "Bad request: wifi_api boolean"); state.wifi_api = b.wifi_api; notes.push(`wifi_api ${b.wifi_api ? "on" : "off"}`); }
+      if (b.password !== undefined) {
+        if (TOKEN) return fail(res, 409, "password is managed by BUSY_API_TOKEN");
+        if (typeof b.password !== "string" || b.password.length > 128) return fail(res, 400, "Bad request: password string up to 128 chars");
+        state.http_token = b.password; notes.push(b.password ? "password set" : "password cleared");
+      }
+      if (!notes.length) return fail(res, 400, "Bad request: wifi_api or password required");
+      saveState(); logCall("POST", p, notes.join(" · "));
+      return send(res, 200, netinfoBody());
+    }
+
+    /* ---- emulator: hardware mirror ---- */
+    if (p === "/api/_mirror" && method === "GET") { return send(res, 200, mirrorInfo()); }
+    if (p === "/api/_mirror" && method === "POST") {
+      const b = await readJson(req);
+      if (b.host !== undefined) {
+        if (typeof b.host !== "string" || b.host.length > 100) return fail(res, 400, "Bad request: host");
+        state.mirror.host = b.host.trim();
+      }
+      if (b.token !== undefined) {
+        if (typeof b.token !== "string" || b.token.length > 200) return fail(res, 400, "Bad request: token");
+        state.mirror.token = b.token;
+      }
+      if (b.enabled !== undefined) state.mirror.enabled = !!b.enabled;
+      if (!state.mirror.host) state.mirror.enabled = false;   // no target → nothing to mirror to
+      if (!state.mirror.enabled) displayFlight.next = null;   // drop any coalesced frame
+      setMirrorStatus(null, state.mirror.enabled ? "enabled" : "off");
+      saveState(); logCall("POST", p, `${state.mirror.enabled ? "on" : "off"}${state.mirror.host ? " · " + state.mirror.host : ""}`); broadcast();
+      return send(res, 200, mirrorInfo());
+    }
+    if (p === "/api/_mirror/test" && method === "POST") {
+      const b = await readJson(req);
+      const host = (typeof b.host === "string" && b.host.trim()) ? b.host.trim() : state.mirror.host;
+      const token = (typeof b.token === "string" && b.token !== "") ? b.token : state.mirror.token;
+      if (!host) return fail(res, 400, "Bad request: host required");
+      logCall("POST", p, host);
+      return send(res, 200, await mirrorProbe(host, token));
     }
 
     fail(res, 404, `no route for ${method} ${p}`);

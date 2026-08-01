@@ -7,6 +7,7 @@ export const device = reactive({
   log: [], connected: false, frameStamp: performance.now() / 1000, _lastTs: -1,
   app: { running: false, name: null, pid: null, startedAt: null, exitCode: null, error: null, output: [] },
   scenario: { offline_until: 0, power_state: 'discharging' },
+  mirror: { enabled: false, host: '', has_token: false, status: { ok: null, msg: 'off', t: 0 } },
 })
 
 let beepCb = null
