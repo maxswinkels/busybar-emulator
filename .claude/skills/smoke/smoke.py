@@ -87,7 +87,7 @@ class Api:
 
 
 def el(txt):
-    return [{"type": "text", "text": txt, "x": 0, "y": 8, "font": "normal"}]
+    return [{"id": "s1", "type": "text", "text": txt, "x": 0, "y": 8, "font": "normal"}]
 
 
 def run_checks(api):
@@ -171,17 +171,16 @@ def run_checks(api):
     status, body = api.jreq("GET", "/api/busy/snapshot")
     check("GET /api/busy/snapshot", status == 200 and isinstance(body, dict), f"got {status}")
 
-    # app runner: start clock, expect its frame on screen, stop, expect release
+    # app runner: start busy_status (a one-shot that draws a theme animation and
+    # exits), expect its frame on screen, then stop and expect the display released.
     status, body = api.jreq("GET", "/api/_apps")
     apps = [a.get("name") for a in (body or {}).get("apps", [])]
-    check("apps: /api/_apps lists clock", status == 200 and "clock" in apps, f"got {status} {apps}")
-    status, body = api.jreq("POST", "/api/_apps/start", {"name": "clock"})
-    check("apps: start clock returns a pid", status == 200 and body and body.get("pid"), f"got {status} {body}")
-    running = api.wait(lambda: (api.jreq("GET", "/api/_apps")[1] or {}).get("app", {}).get("running"))
-    check("apps: clock reports running", bool(running))
-    owner = api.wait(lambda: (api.snapshot() or {}).get("frame", {}).get("application_name") == "demo.clock",
+    check("apps: /api/_apps lists busy_status", status == 200 and "busy_status" in apps, f"got {status} {apps}")
+    status, body = api.jreq("POST", "/api/_apps/start", {"name": "busy_status", "args": ["coding"]})
+    check("apps: start busy_status returns a pid", status == 200 and body and body.get("pid"), f"got {status} {body}")
+    owner = api.wait(lambda: (api.snapshot() or {}).get("frame", {}).get("application_name") == "busy",
                      timeout=6.0)
-    check("apps: clock frame reaches the display", bool(owner))
+    check("apps: busy_status frame reaches the display", bool(owner))
     status, _ = api.jreq("POST", "/api/_apps/stop")
     check("apps: stop", status == 200, f"got {status}")
     released = api.wait(lambda: not (api.snapshot() or {}).get("frame", {}).get("elements"), timeout=4.0)

@@ -49,7 +49,6 @@ Then drive it like the real device:
 ```bash
 python3 apps/clock.py              # big clock in the real device font
 python3 apps/busy_status.py coding # plays the real "coding" theme animation
-python3 apps/weather.py            # uploads an icon asset + draws a temperature
 python3 apps/sound_test.py         # plays every stock sound in order (emulator lists them automatically)
 python3 apps/pixel_fire.py         # demoscene fire on the LEDs (also: rain, plasma)
 python3 apps/mac_monitor.py        # CPU / RAM / network bars from your Mac
@@ -61,6 +60,15 @@ python3 apps/mac_monitor.py        # CPU / RAM / network bars from your Mac
 ## Share your apps
 
 Built something cool? Share it in the [community gallery](https://maxswinkels.github.io/busybar-apps/). Browse what others made, or submit your own via pull request to [busybar-apps](https://github.com/maxswinkels/busybar-apps).
+
+The gallery is the **single source of truth** for apps, so you never maintain a second copy by hand. To try them in the emulator, pull them into `apps/local/` (which is gitignored and never committed):
+
+```bash
+./tools/pull-apps.sh                                   # from the published gallery on GitHub
+BUSYBAR_APPS_DIR=../busybar-apps ./tools/pull-apps.sh  # from a local gallery checkout
+```
+
+Each pulled app shows up in the **Apps** tab with a `local` tag, ready to run against the emulator or a real bar. Re-run the script whenever the gallery changes. The committed `apps/*.py` are the emulator's own reference examples, built on the `apps/busybar.py` client; every community app comes from the gallery via the pull above.
 
 ## Features
 
