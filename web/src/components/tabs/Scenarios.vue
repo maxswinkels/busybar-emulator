@@ -58,7 +58,7 @@
       <h2 class="card-title"><span class="badge" v-html="icons.square"></span>Priority steal</h2>
       <div class="lbl-row">
         <span class="lbl">Priority</span>
-        <input class="app-args" type="number" min="1" max="100" v-model.number="prio" style="max-width:90px" />
+        <input class="text-input" type="number" min="1" max="100" v-model.number="prio" style="max-width:90px" />
       </div>
       <div class="lbl-row" style="margin-top:8px">
         <span class="lbl">Auto-release</span>
@@ -78,7 +78,7 @@
         <span class="k">Priority</span><span class="v">{{ device.frame.elements.length ? device.frame.priority : '—' }}</span>
       </div>
       <div class="status-line err" style="margin-top:8px">{{ stealStatus }}</div>
-      <div class="muted-note" style="margin-top:10px">Draws a PRIORITY N frame as app _scenario.steal. A lower-priority app now gets 409 Not drawn due to low priority — run apps/clock.py to watch it cope.</div>
+      <div class="muted-note" style="margin-top:10px">Draws a PRIORITY N frame as app _scenario.steal. A lower-priority app now gets 409 Not drawn due to low priority; point an app at the emulator to watch it cope.</div>
     </div>
 
     <!-- 5. Reset -->

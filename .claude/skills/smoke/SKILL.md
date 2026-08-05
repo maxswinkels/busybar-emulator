@@ -1,6 +1,6 @@
 ---
 name: smoke
-description: Boot the emulator on a scratch port and smoke-test the core API surface (draw priority/409 arbitration, app_id alias, sem-ver gate, brightness, storage roundtrip, app runner start/stop + display release). The repo has no test suite; this is the pre-commit sanity check. Use after any change to server.js or apps/busybar.py, or when asked to verify the emulator still works.
+description: Boot the emulator on a scratch port and smoke-test the core API surface (draw priority/409 arbitration, app_id alias, sem-ver gate, brightness, storage roundtrip, busy snapshot). The repo has no test suite; this is the pre-commit sanity check. Use after any change to server.js, or when asked to verify the emulator still works.
 ---
 
 # Smoke-test the emulator
@@ -37,5 +37,3 @@ success one sentence is enough.
 - Node and python3 are the only requirements; `web/dist` is not needed (API only).
 - Storage persists to `.data/state.json`, which is shared with a dev server.
   The script namespaces its keys under `_smoke/` and removes them again.
-- The app-runner checks launch `apps/clock.py` for a few seconds and verify
-  the display is released after stop.

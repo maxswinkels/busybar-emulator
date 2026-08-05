@@ -71,8 +71,8 @@ rm -rf d_tiny d_small d_normal d_condensed d_bold d_large d_extra_large d_global
    git diff --stat public/fonts/font-atlas.json
    ```
    If you only rebaked (no TTF changes), expect no diff or a trivial one.
-2. Eyeball the result in the running emulator (`npm start`, then e.g.
-   `python3 apps/clock.py`), glyphs should look crisp and identical to before
-   unless the TTFs changed. Text in every font of every app renders from this
-   atlas, so regressions are immediately visible.
+2. Eyeball the result in the running emulator (`npm start`, then draw some text
+   with the draw tool or over the HTTP API), glyphs should look crisp and
+   identical to before unless the TTFs changed. Text in every font renders from
+   this atlas, so regressions are immediately visible.
 3. If the result looks wrong, restore with `git checkout -- public/fonts/font-atlas.json`.

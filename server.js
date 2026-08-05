@@ -12,13 +12,9 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const crypto = require("crypto");
-const { spawn, spawnSync } = require("child_process");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const TOKEN = process.env.BUSY_API_TOKEN || null;
-const PYTHON = process.env.BUSY_PYTHON || "python3";
-const APPS_DIR = path.join(__dirname, "apps");
 const PUBLIC = path.join(__dirname, "public");
 const DIST = path.join(__dirname, "web", "dist");   // built Vue app
 const ANIM_DIR = path.join(PUBLIC, "animations");
@@ -62,250 +58,6 @@ function scanSounds() {
   return out;
 }
 const SOUNDS = scanSounds();
-
-/* --------------------------------- apps ---------------------------------- */
-// Hand-written inputs for bundled apps whose args aren't argparse-discoverable.
-// Gallery apps in apps/local auto-discover their argparse options at scan time.
-const APP_PARAMS = {
-  "busy_status.py": [{ key: "theme", label: "Theme", type: "select", positional: true, default: "on_air",
-    options: ["keep_out","dnd","meeting","on_call","lunch","back_soon","booked","flow","chill_time","on_air","coding","low_social_battery"] }],
-};
-
-// Auto-discover an argparse app's options by parsing its own `--help` output,
-// so the Apps tab can render inputs without a hand-written APP_PARAMS entry.
-// Only runs for scripts that mention argparse (others might loop on --help),
-// cached per file mtime; the runner passes --host itself so it is skipped.
-const ARG_SKIP = new Set(["-h", "--help", "--host", "--test"]);
-const argCache = {};
-function argparseParams(fullPath) {
-  let mtime;
-  try { mtime = fs.statSync(fullPath).mtimeMs; } catch (_) { return []; }
-  const hit = argCache[fullPath];
-  if (hit && hit.mtime === mtime) return hit.params;
-  let params = [];
-  try {
-    if (fs.readFileSync(fullPath, "utf8").includes("argparse")) {
-      const r = spawnSync(PYTHON, [fullPath, "--help"], { timeout: 3000, encoding: "utf8" });
-      if (r.status === 0 && r.stdout) params = parseHelp(r.stdout);
-    }
-  } catch (_) {}
-  argCache[fullPath] = { mtime, params };
-  return params;
-}
-function parseHelp(help) {
-  const params = [];
-  // option entries look like "  --theme {a,b,c}  help..." or "  --user USER  help..."
-  // or "  --test  help..."; continuation lines are indented further.
-  const re = /^[ ]{2}(--[\w-]+)(?:[ =](\{[^}]*\}|[A-Z][\w-]*))?(?:[ \t]{2,}(\S.*))?$/gm;
-  let m;
-  while ((m = re.exec(help)) !== null) {
-    const [, flag, meta, rest] = m;
-    if (ARG_SKIP.has(flag)) continue;
-    const key = flag.replace(/^--/, "");
-    const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, " ");
-    // find the help text: trailing same-line text or the indented next line
-    let hint = rest || "";
-    if (!hint) {
-      const after = help.slice(m.index + m[0].length);
-      const cont = after.match(/^\n\s{10,}(\S.*)/);
-      if (cont) hint = cont[1];
-    }
-    const def = (hint.match(/\(default:\s*([^)]+)\)/) || [])[1];
-    if (meta && meta.startsWith("{")) {
-      const options = meta.slice(1, -1).split(",").map((s) => s.trim()).filter(Boolean);
-      params.push({ key, label, type: "select", flag, options, default: def || options[0], help: hint });
-    } else if (!meta) {
-      params.push({ key, label, type: "check", flag, help: hint });
-    } else {
-      params.push({ key, label, type: "text", flag, placeholder: def || "", help: hint });
-    }
-  }
-  return params;
-}
-
-function scanApps() {
-  const isApp = (f) => f.endsWith(".py") && f !== "busybar.py" && !f.startsWith("_");
-  const describe = (fullPath, fallback) => {
-    try {
-      const head = fs.readFileSync(fullPath, "utf8").slice(0, 2048);
-      const m = head.match(/"""[\s\n]*([^\n"]+)/);
-      if (m) return m[1].trim();
-    } catch (_) {}
-    return fallback;
-  };
-  // rel is the path under apps/ used to spawn the script; slug (its basename or
-  // folder name) is the display name and the APP_PARAMS key.
-  const make = (rel, slug, script, prefix) => {
-    const full = path.join(APPS_DIR, rel);
-    const entry = { name: prefix ? `${prefix}/${slug}` : slug, file: rel,
-      description: describe(full, slug), params: APP_PARAMS[script] || argparseParams(full) };
-    if (prefix) entry.local = true;
-    return entry;
-  };
-  const scan = (dir, prefix = "") => {
-    let ents = [];
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return []; }
-    const out = [];
-    for (const d of ents) {
-      const rel = prefix ? `${prefix}/${d.name}` : d.name;
-      // Flat single-file app: apps/local/foo.py
-      if (d.isFile() && isApp(d.name)) { out.push(make(rel, d.name.replace(".py", ""), d.name, prefix)); continue; }
-      // Foldered app (local only): apps/local/<slug>/<slug>.py, else app.py, else the lone .py
-      if (prefix && d.isDirectory() && !d.name.startsWith("_") && !d.name.startsWith(".")) {
-        let subFiles = [];
-        try { subFiles = fs.readdirSync(path.join(dir, d.name)).filter(isApp); } catch (_) {}
-        const script = subFiles.includes(`${d.name}.py`) ? `${d.name}.py`
-          : subFiles.includes("app.py") ? "app.py"
-          : subFiles.length === 1 ? subFiles[0] : null;
-        if (script) out.push(make(`${rel}/${script}`, d.name, script, prefix));
-      }
-    }
-    return out;
-  };
-  return scan(APPS_DIR).concat(scan(path.join(APPS_DIR, "local"), "local"));
-}
-
-let appProc = null;  // { child, name, pid, startedAt, exitCode, error, output, buf }
-let appOpChain = Promise.resolve();
-let appBcastTimer = null;
-
-function appStatus() {
-  if (!appProc) return { running: false, name: null, pid: null, startedAt: null, exitCode: null, error: null, output: [] };
-  return { running: appProc.exitCode === undefined && !appProc.error, name: appProc.name, pid: appProc.pid || null, startedAt: appProc.startedAt, exitCode: appProc.exitCode !== undefined ? appProc.exitCode : null, error: appProc.error || null, output: appProc.output };
-}
-
-// rec-scoped so a late exit from a replaced child can't touch the current app's state
-function pushLine(rec, s, line) {
-  if (line.length > 300) line = line.slice(0, 300) + "…";
-  rec.output.push({ t: Date.now(), s, line });
-  if (rec.output.length > 50) rec.output.shift();
-  if (rec !== appProc || appBcastTimer) return;
-  appBcastTimer = setTimeout(() => { appBcastTimer = null; broadcast(); }, 50);
-}
-
-// Wire stdout/stderr of a child process into rec's line buffers via pushLine.
-function wireStreams(child, rec) {
-  function lineBuffer(stream, s) {
-    child[stream].on("data", (chunk) => {
-      rec.buf[s] += chunk.toString("utf8");
-      let nl;
-      while ((nl = rec.buf[s].indexOf("\n")) !== -1) {
-        pushLine(rec, s, rec.buf[s].slice(0, nl));
-        rec.buf[s] = rec.buf[s].slice(nl + 1);
-      }
-    });
-  }
-  lineBuffer("stdout", "out");
-  lineBuffer("stderr", "err");
-}
-
-// Run a setup child (venv create or pip install) with its streams wired into rec.
-// Resolves on exit code 0, rejects with "venv setup failed (exit N)" otherwise.
-// The child is assigned to rec.child while running so stopApp() can kill it.
-function runSetup(rec, cmd, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
-      env: Object.assign({}, process.env, { PYTHONUNBUFFERED: "1" }),
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-    rec.child = child;
-    wireStreams(child, rec);
-    child.on("error", (err) => { rec.child = null; reject(new Error(`venv setup failed (${err.message})`)); });
-    child.on("exit", (code) => {
-      // flush trailing partial lines from this setup child's streams
-      if (rec.buf.out) { pushLine(rec, "out", rec.buf.out); rec.buf.out = ""; }
-      if (rec.buf.err) { pushLine(rec, "err", rec.buf.err); rec.buf.err = ""; }
-      rec.child = null;
-      const n = code !== null ? code : -1;
-      if (n !== 0) reject(new Error(`venv setup failed (exit ${n})`));
-      else resolve();
-    });
-  });
-}
-
-async function startApp(entry, userArgs) {
-  const rec = { child: null, name: entry.name, pid: null, startedAt: Date.now(), exitCode: undefined, error: null, output: [], buf: { out: "", err: "" } };
-  appProc = rec;
-  broadcast();
-
-  // Determine whether this is a foldered app that needs a venv.
-  const fileDir = path.dirname(entry.file);
-  const isFoldered = fileDir !== "." && fileDir !== "local";
-  const folder = path.join(APPS_DIR, fileDir);
-  const reqFile = path.join(folder, "requirements.txt");
-  let pyBin = PYTHON;
-
-  if (isFoldered && fs.existsSync(reqFile)) {
-    const venvDir = path.join(folder, ".venv");
-    const pyBinPath = process.platform === "win32"
-      ? path.join(venvDir, "Scripts", "python.exe")
-      : path.join(venvDir, "bin", "python3");
-    const stamp = path.join(venvDir, ".req-sha");
-    const sha = crypto.createHash("sha256").update(fs.readFileSync(reqFile)).digest("hex");
-
-    let needSetup = true;
-    if (fs.existsSync(pyBinPath)) {
-      try { needSetup = fs.readFileSync(stamp, "utf8").trim() !== sha; } catch (_) {}
-    }
-
-    if (needSetup) {
-      try {
-        if (!fs.existsSync(pyBinPath)) {
-          pushLine(rec, "out", "[setup] creating .venv …");
-          await runSetup(rec, PYTHON, ["-m", "venv", venvDir]);
-        }
-        pushLine(rec, "out", "[setup] pip install -r requirements.txt …");
-        await runSetup(rec, pyBinPath, ["-m", "pip", "install", "-r", reqFile]);
-        fs.writeFileSync(stamp, sha, "utf8");
-        pushLine(rec, "out", "[setup] done");
-      } catch (e) {
-        rec.error = e.message;
-        broadcast();
-        throw e;
-      }
-    }
-    pyBin = pyBinPath;
-  }
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(pyBin, [path.join(APPS_DIR, entry.file), "--host", `127.0.0.1:${PORT}`, ...userArgs], {
-      env: Object.assign({}, process.env, { PYTHONUNBUFFERED: "1" }),
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
-    rec.child = child;
-
-    let settled = false;
-    function settle(err) { if (settled) return; settled = true; if (err) reject(err); else resolve(rec.pid); }
-
-    child.on("spawn", () => { rec.pid = child.pid; settle(null); if (rec === appProc) broadcast(); });
-    child.on("error", (err) => {
-      rec.error = err.message;
-      settle(err);
-      if (rec === appProc) broadcast();
-    });
-    wireStreams(child, rec);
-    child.on("exit", (code) => {
-      if (rec.buf.out) { pushLine(rec, "out", rec.buf.out); rec.buf.out = ""; }
-      if (rec.buf.err) { pushLine(rec, "err", rec.buf.err); rec.buf.err = ""; }
-      rec.exitCode = code !== null ? code : -1;
-      pushLine(rec, "out", `[process exited: ${rec.exitCode}]`);
-      if (rec === appProc) broadcast();
-    });
-  });
-}
-
-function stopApp() {
-  return new Promise((resolve) => {
-    if (!appProc || !appProc.child || appProc.exitCode !== undefined || appProc.error) { resolve(false); return; }
-    const child = appProc.child;
-    let done = false;
-    child.once("exit", () => { if (!done) { done = true; resolve(true); } });
-    try { process.kill(-child.pid, "SIGTERM"); } catch (_) { child.kill("SIGTERM"); }
-    setTimeout(() => { if (!done) { done = true; try { process.kill(-child.pid, "SIGKILL"); } catch (_) { try { child.kill("SIGKILL"); } catch (_2) {} } resolve(true); } }, 1500);
-  });
-}
 
 /* ---------------------------- persistence -------------------------------- */
 const DATA_DIR = path.join(__dirname, ".data");
@@ -416,7 +168,6 @@ function snapshot() {
     battery_charge: state.battery_charge, uptime: Math.floor((Date.now() - state.startTime) / 1000),
     theme: state.busy_snapshot.snapshot.busy_bar_settings ? state.busy_snapshot.snapshot.busy_bar_settings.theme : null,
     log: state.log.slice(0, 18),
-    app: appStatus(),
     scenario: { offline_until: scenario.offline_until, power_state: scenario.power_state },
     mirror: mirrorInfo(),
   };
@@ -613,9 +364,6 @@ function openapiSpec() {
     "/api/version": { get: { tags: ["Meta"], summary: "API version", responses: { "200": dataR("version", { api_semver: { type: "string", example: API_SEMVER } }) } } },
     "/api/transport": { get: { tags: ["Meta"], summary: "Transport (usb|wifi)", responses: { "200": dataR("transport", { type: { type: "string", enum: ["usb", "wifi"] } }) } } },
     "/api/access": { get: { tags: ["Meta"], summary: "Auth mode", responses: { "200": dataR("access", { mode: { type: "string", enum: ["disabled", "key"] }, key_valid: { type: "boolean" } }) } } },
-    "/api/_apps": { get: { tags: ["Emulator"], summary: "List example apps + runner state", responses: { "200": okR } } },
-    "/api/_apps/start": { post: { tags: ["Emulator"], summary: "Start an app", requestBody: objBody({ name: { type: "string" }, args: { type: "array", items: { type: "string" } } }), responses: { "200": okR, "404": errR } } },
-    "/api/_apps/stop": { post: { tags: ["Emulator"], summary: "Stop the running app", responses: { "200": okR } } },
     "/api/_scenario": { get: { tags: ["Emulator"], summary: "Scenario state", responses: { "200": okR } } },
     "/api/_scenario/power": { post: { tags: ["Emulator"], summary: "Set battery / charge state", requestBody: objBody({ battery_charge: { type: "integer" }, state: { type: "string", enum: ["charging", "discharging", "charged"] } }), responses: { "200": okR, "400": errR } } },
     "/api/_scenario/offline": { post: { tags: ["Emulator"], summary: "Drop the connection for a window", requestBody: objBody({ duration_ms: { type: "integer" } }), responses: { "200": okR } } },
@@ -970,46 +718,6 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/input" && method === "POST") { const KEYS = ["up", "down", "ok", "back", "start", "busy", "custom", "off", "apps", "settings"]; if (!KEYS.includes(q.key)) return fail(res, 400, "bad key"); logCall("POST", p, q.key); emit("input", { key: q.key }); return ok(res); }
     if (p === "/api/log_dump" && method === "POST") { logCall("POST", p, q.filename || ""); return ok(res, { path: `/ext/logs/${q.filename || "dump"}.txt` }); }
 
-    /* ---- emulator: app runner ---- */
-    if (p === "/api/_apps" && method === "GET") { return send(res, 200, { apps: scanApps(), app: appStatus() }); }
-    if (p === "/api/_apps/start" && method === "POST") {
-      const b = await readJson(req);
-      const apps = scanApps();
-      const entry = apps.find((a) => a.name === b.name);
-      if (!entry) return fail(res, 404, `unknown app: ${b.name}`);
-      const userArgs = b.args !== undefined ? b.args : [];
-      if (!Array.isArray(userArgs)) return fail(res, 400, "args must be an array");
-      if (userArgs.length > 8) return fail(res, 400, "args: max 8 entries");
-      for (const a of userArgs) {
-        if (typeof a !== "string") return fail(res, 400, "args entries must be strings");
-        if (a.length > 64) return fail(res, 400, "args entry too long (max 64)");
-        if (a.startsWith("--host")) return fail(res, 400, "args may not contain --host");
-      }
-      logCall("POST", p, `start ${entry.name}`);
-      let pid;
-      try {
-        pid = await new Promise((resolve, reject) => {
-          appOpChain = appOpChain.then(async () => {
-            await stopApp();
-            // Launcher-only: Run means "put this app on screen now", so release the
-            // display first (same as a bare DELETE /api/display/draw). The draw API's
-            // arbitration itself stays firmware-faithful for apps run outside the UI.
-            if (state.frame.elements.length) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; broadcast(); }
-            try { resolve(await startApp(entry, userArgs)); } catch (e) { reject(e); }
-          });
-        });
-      } catch (e) { logCall("POST", p, `error ${e.message}`); return fail(res, 500, e.message); }
-      return ok(res, { pid });
-    }
-    if (p === "/api/_apps/stop" && method === "POST") {
-      logCall("POST", p, "stop");
-      const stopped = await new Promise((resolve) => { appOpChain = appOpChain.then(async () => { resolve(await stopApp()); }); });
-      // Release the screen on an explicit stop, so the runner doesn't rely on the
-      // app clearing its own frame on exit (standalone apps may not handle SIGTERM).
-      if (state.frame.elements.length) { state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 }; broadcast(); }
-      return ok(res, { stopped });
-    }
-
     /* ---- emulator: scenario simulator ---- */
     if (p === "/api/_scenario" && method === "GET") { return send(res, 200, scenarioInfo()); }
     if (p === "/api/_scenario/power" && method === "POST") {
@@ -1115,17 +823,6 @@ const server = http.createServer(async (req, res) => {
     fail(res, 404, `no route for ${method} ${p}`);
   } catch (err) { fail(res, 400, err.message || "bad request"); }
 });
-
-function killChild() {
-  if (!appProc || !appProc.child) return;
-  const pid = appProc.child.pid;
-  if (!pid) return;
-  // Use spawnSync("kill") so the signal is delivered synchronously before we exit.
-  try { spawnSync("kill", ["-9", String(-pid)]); } catch (_) {}
-  try { spawnSync("kill", ["-9", String(pid)]); } catch (_) {}
-}
-process.on("SIGINT", () => { killChild(); process.exit(0); });
-process.on("SIGTERM", () => { killChild(); process.exit(0); });
 
 server.listen(PORT, () => {
   console.log(`\n  BUSY Bar emulator running`);

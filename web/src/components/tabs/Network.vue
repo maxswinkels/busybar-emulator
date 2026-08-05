@@ -46,7 +46,7 @@
           <div class="lbl-row" style="margin-bottom:8px"><span class="lbl" style="font-size:14px">Real bar host</span></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <input
-              class="app-args" style="flex:1;min-width:170px" type="text"
+              class="text-input" style="flex:1;min-width:170px" type="text"
               v-model="host" placeholder="10.0.4.20  (or 10.0.4.20:8080)"
               @keydown.enter="test"
             />
@@ -61,7 +61,7 @@
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <input
-              class="app-args" style="flex:1;min-width:170px" type="password" autocomplete="off"
+              class="text-input" style="flex:1;min-width:170px" type="password" autocomplete="off"
               v-model="token"
               :placeholder="mirror.has_token ? 'unchanged — leave blank to keep' : 'only if the bar requires one'"
             />

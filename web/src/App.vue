@@ -21,7 +21,6 @@
         <TabNetwork v-else-if="tab === 'network'" />
         <TabFirmware v-else-if="tab === 'firmware'" />
         <TabDrawTool v-else-if="tab === 'draw-tool'" />
-        <TabApps v-else-if="tab === 'apps'" />
         <TabScenarios v-else-if="tab === 'scenarios'" />
       </main>
     </div>
@@ -43,14 +42,13 @@ import TabSettings from './components/tabs/Settings.vue'
 import TabNetwork from './components/tabs/Network.vue'
 import TabFirmware from './components/tabs/Firmware.vue'
 import TabDrawTool from './components/tabs/DrawTool.vue'
-import TabApps from './components/tabs/Apps.vue'
 import TabScenarios from './components/tabs/Scenarios.vue'
 
-const TABS = ['network', 'firmware', 'settings', 'draw-tool', 'apps', 'scenarios']
+const TABS = ['network', 'firmware', 'settings', 'draw-tool', 'scenarios']
 function tabFromUrl() {
   const p = location.pathname.replace(/^\//, '')
   if (TABS.includes(p)) return p
-  const h = location.hash.replace(/^#\/?/, '') // legacy #apps-style links
+  const h = location.hash.replace(/^#\/?/, '') // legacy #tab-style links
   return TABS.includes(h) ? h : 'settings'
 }
 const tab = ref(tabFromUrl())

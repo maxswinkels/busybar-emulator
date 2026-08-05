@@ -26,6 +26,9 @@
 
 ---
 
+> [!TIP]
+> **Run and manage BUSY Bar apps with [busybar-manager](https://github.com/maxswinkels/busybar-manager).** It's the companion app that launches, manages and monitors apps against this emulator or a real bar. The emulator is the device; busybar-manager drives it.
+
 > [!IMPORTANT]
 > **Unofficial community project.** Built and maintained by [Max Swinkels](https://github.com/maxswinkels), **not** an official Flipper Devices / BUSY product, and not affiliated with, endorsed by, or supported by them. "BUSY Bar" remains their trademark. For the real hardware and official apps, visit **[busy.app](https://busy.app)**.
 
@@ -44,31 +47,16 @@ node server.js
 # → http://127.0.0.1:8080
 ```
 
-Then drive it like the real device:
-
-```bash
-python3 apps/clock.py              # big clock in the real device font
-python3 apps/busy_status.py coding # plays the real "coding" theme animation
-python3 apps/sound_test.py         # plays every stock sound in order (emulator lists them automatically)
-python3 apps/pixel_fire.py         # demoscene fire on the LEDs (also: rain, plasma)
-python3 apps/mac_monitor.py        # CPU / RAM / network bars from your Mac
-```
+Then open **http://127.0.0.1:8080** and drive it: draw on the LEDs with the WYSIWYG **Draw tool**, hit the HTTP API directly, or run apps with **[busybar-manager](https://github.com/maxswinkels/busybar-manager)** (or any BUSY Bar app) pointed at the host.
 
 > [!TIP]
-> Take any real BUSY Bar example script, point its host at `127.0.0.1:8080`, and it just works. The API is identical, right down to accepting `app_id`.
+> Take any real BUSY Bar app, point its host at `127.0.0.1:8080`, and it just works. The API is identical, right down to accepting `app_id`.
 
-## Share your apps
+## Community apps
 
-Built something cool? Share it in the [community gallery](https://maxswinkels.github.io/busybar-apps/). Browse what others made, or submit your own via pull request to [busybar-apps](https://github.com/maxswinkels/busybar-apps).
+Built something cool? Share it in the [community gallery](https://maxswinkels.github.io/busybar-apps/), and browse what others made. Submit your own via pull request to [busybar-apps](https://github.com/maxswinkels/busybar-apps).
 
-The gallery is the **single source of truth** for apps, so you never maintain a second copy by hand. To try them in the emulator, pull them into `apps/local/` (which is gitignored and never committed):
-
-```bash
-./tools/pull-apps.sh                                   # from the published gallery on GitHub
-BUSYBAR_APPS_DIR=../busybar-apps ./tools/pull-apps.sh  # from a local gallery checkout
-```
-
-Each pulled app shows up in the **Apps** tab with a `local` tag, ready to run against the emulator or a real bar. Re-run the script whenever the gallery changes. The committed `apps/*.py` are the emulator's own reference examples, built on the `apps/busybar.py` client; every community app comes from the gallery via the pull above.
+Run and manage apps with **[busybar-manager](https://github.com/maxswinkels/busybar-manager)**, the companion app that launches them against the emulator or a real bar. Every app is just HTTP calls against the device API, so pointing one at `127.0.0.1:8080` runs it exactly as it would against real hardware. The emulator itself ships no bundled apps.
 
 ## Features
 
@@ -119,10 +107,7 @@ curl -s -X POST localhost:8080/api/display/draw -H 'content-type: application/js
 | `GET /api/version` → `{"api_semver":"25.0.0"}` · `GET /api/transport` · `GET/POST /api/access` | Meta |
 | `POST /api/input?key=` · `POST /api/log_dump` | Buttons / logs |
 | `GET /api/_animations` | *(emulator)* imported-animation manifest with `fps`/`sections` |
-| `GET /api/_sounds` | *(emulator)* stock-sound manifest `{name: filename}` (used by `sound_test.py`) |
-| `GET /api/_apps` | *(emulator)* list runnable example apps + current app state/output |
-| `POST /api/_apps/start` | *(emulator)* `{name, args?}`, spawn an app (stops any running app first); foldered `apps/local` apps with a `requirements.txt` run in an auto-created per-app `.venv` |
-| `POST /api/_apps/stop` | *(emulator)* stop the running app → `{stopped:bool}` |
+| `GET /api/_sounds` | *(emulator)* stock-sound manifest `{name: filename}` |
 | `GET /api/_scenario` | *(emulator)* scenario state: power override, offline window, steal ownership |
 | `POST /api/_scenario/power` | *(emulator)* `{battery_charge?, state?}` set battery % / charging state (shown in `/api/status/power`) |
 | `POST /api/_scenario/offline` | *(emulator)* `{duration_ms}` reset all non-emulator `/api/*` connections for the window; call again to restore early |
@@ -157,20 +142,16 @@ Common fields: `id` (required), `type` (required), `x`, `y`, `align` (`top_left`
 
 ## Point it at real hardware
 
-```python
-bar = BusyBar("10.0.4.20")   # USB-ethernet or the bar's Wi-Fi IP
-```
-
-Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and asset uploads. It all follows the device's HTTP API.
+Everything you build against the emulator targets a real BUSY Bar unchanged: point your app (or [busybar-manager](https://github.com/maxswinkels/busybar-manager)) at the bar's host instead of `127.0.0.1:8080`. Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and asset uploads. It all follows the device's HTTP API.
 
 **Or mirror to hardware while you develop.** In the **Network** tab, set your bar's host, hit **Test**, and toggle **Mirror display to hardware**. The emulator then relays every draw, clear, brightness change and asset upload to the real bar as-is (same app name + priority), so the browser preview and the LEDs render the same frame at once. Your app keeps pointing at the emulator, no `--host` change needed; forwarding is best-effort and never blocks the app. Add an API token if the bar requires one on Wi-Fi.
 
 ## Architecture
 
 ```
-┌── apps (Python) ──┐   POST /api/display/draw    ┌── server.js (Node) ──┐   SSE   ┌── browser ──┐
-│ clock, pixel_fire │  ─────────────────────────▶ │ mock BUSY Bar API +  │ ──────▶ │ LED display │
-│ ping, mac_monitor…│                             │ device state         │         │ (renderer)  │
+┌─── client apps ───┐   POST /api/display/draw    ┌── server.js (Node) ──┐   SSE   ┌── browser ──┐
+│ your BUSY Bar app │  ─────────────────────────▶ │ mock BUSY Bar API +  │ ──────▶ │ LED display │
+│ or the draw tool  │                             │ device state         │         │ (renderer)  │
 └───────────────────┘                             └──────────────────────┘         └─────────────┘
 ```
 
@@ -181,7 +162,7 @@ Same fonts, alignment, colors, scrolling, stock icons, timeouts, priority and as
 
 - **Rendering is a faithful approximation.** Assets decode in the browser (1 image pixel = 1 LED), the front display applies gamma 0.35, and the back OLED is grayscale. `busy_tiny` is bitmap-only and falls back to `busy_regular_5px`.
 - **Priority/409 matches the firmware's core rule.** The current owner may redraw at equal priority; a different app needs strictly higher priority to take the screen (else 409). Not emulated: the real device may defer a conflicting request for up to 1.5 s, merges same-app elements by `id`, and expires elements via per-element timeouts.
-- **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, `/api/_apps*` (app runner), `/api/_scenario*` (scenario simulator) and `/api/_mirror*` (hardware mirror) are emulator conveniences.
+- **Stubs or omitted.** Storage, audio, smart_home, wifi, update and BLE endpoints are simplified. `type:"animation"`, `/api/_animations`, `/api/_scenario*` (scenario simulator) and `/api/_mirror*` (hardware mirror) are emulator conveniences.
 
 </details>
 
@@ -193,7 +174,6 @@ The goal is the fastest way to build, test and show off BUSY Bar apps, with or w
 
 - [ ] **API console**: a request builder for every `/api/*` endpoint, with live responses and replay (the draw tool, generalized)
 - [x] **Scenario simulator**: trigger the conditions apps must handle, like low battery, USB/Wi-Fi drop, button presses, and a higher-priority app stealing the screen (so you can test your 409 handling)
-- [ ] **Multi-app sandbox**: run several apps at once and watch priority decide who owns the screen
 - [ ] **Record &amp; replay**: capture an app's calls and scrub the timeline to debug animation timing
 
 **Fidelity**
@@ -204,9 +184,7 @@ The goal is the fastest way to build, test and show off BUSY Bar apps, with or w
 
 **SDK &amp; distribution**
 
-- [ ] **Published clients**: the Python client on PyPI and a TypeScript client on npm, mirroring the official libraries
 - [ ] **`npx busybar-emulator`**: run with no build step, plus a Docker image
-- [ ] **App templates**: `create-busybar-app` starters (clock, status, monitor)
 - [x] **Persistent state**: storage and uploaded assets survive restarts
 
 **Content creation**

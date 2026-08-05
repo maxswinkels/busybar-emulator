@@ -5,7 +5,6 @@ export const device = reactive({
   frame: { application_name: null, elements: [], ts: 0 },
   brightness: 80, volume: 60, battery_charge: 0, name: '', uptime: 0,
   log: [], connected: false, frameStamp: performance.now() / 1000, _lastTs: -1,
-  app: { running: false, name: null, pid: null, startedAt: null, exitCode: null, error: null, output: [] },
   scenario: { offline_until: 0, power_state: 'discharging' },
   mirror: { enabled: false, host: '', has_token: false, status: { ok: null, msg: 'off', t: 0 } },
 })

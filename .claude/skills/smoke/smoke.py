@@ -7,8 +7,7 @@ if everything passed. Pure stdlib, no flags.
 
 Covers: version, draw priority/409 arbitration (incl. app_id alias),
 draw validation, display clear, sem-ver gate, brightness, storage
-roundtrip, busy snapshot, and the app runner (start clock -> frame on
-screen -> stop -> display released).
+roundtrip, and busy snapshot.
 
 Note: the server persists storage to .data/state.json (shared with a dev
 server, no env override). Every key this test writes is removed again.
@@ -171,26 +170,10 @@ def run_checks(api):
     status, body = api.jreq("GET", "/api/busy/snapshot")
     check("GET /api/busy/snapshot", status == 200 and isinstance(body, dict), f"got {status}")
 
-    # app runner: start busy_status (a one-shot that draws a theme animation and
-    # exits), expect its frame on screen, then stop and expect the display released.
-    status, body = api.jreq("GET", "/api/_apps")
-    apps = [a.get("name") for a in (body or {}).get("apps", [])]
-    check("apps: /api/_apps lists busy_status", status == 200 and "busy_status" in apps, f"got {status} {apps}")
-    status, body = api.jreq("POST", "/api/_apps/start", {"name": "busy_status", "args": ["coding"]})
-    check("apps: start busy_status returns a pid", status == 200 and body and body.get("pid"), f"got {status} {body}")
-    owner = api.wait(lambda: (api.snapshot() or {}).get("frame", {}).get("application_name") == "busy",
-                     timeout=6.0)
-    check("apps: busy_status frame reaches the display", bool(owner))
-    status, _ = api.jreq("POST", "/api/_apps/stop")
-    check("apps: stop", status == 200, f"got {status}")
-    released = api.wait(lambda: not (api.snapshot() or {}).get("frame", {}).get("elements"), timeout=4.0)
-    check("apps: display released after stop", bool(released))
-
 
 def main():
     port = free_port()
     env = dict(os.environ, PORT=str(port))
-    env.pop("BUSY_PYTHON", None)  # a dev override here would break the app-runner checks
     log = tempfile.NamedTemporaryFile(prefix="busybar-smoke-", suffix=".log", delete=False)
     try:
         proc = subprocess.Popen(["node", "server.js"], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
@@ -210,10 +193,6 @@ def main():
         print(f"emulator up on :{port} (log: {log.name})")
         run_checks(api)
     finally:
-        try:
-            api.jreq("POST", "/api/_apps/stop")  # never orphan a spawned app
-        except Exception:
-            pass
         proc.terminate()
         try:
             proc.wait(timeout=3)

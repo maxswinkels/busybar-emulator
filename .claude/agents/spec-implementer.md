@@ -12,7 +12,7 @@ You implement pre-written specs in the BUSY Bar emulator repo, exactly as specif
 - The real firmware's HTTP API is the source of truth. Never invent, rename, or "improve" `/api/*` paths, verbs, response shapes, or error codes. Emulator-only routes are prefixed `/api/_`.
 - The draw payload accepts both `application_name` and `app_id`; preserve that whenever touching the draw route.
 - Font names are the fixed device set (`tiny small normal condensed bold large extra_large global`); colors are `#RRGGBBAA` strings.
-- The element schema and behavior must stay consistent across the three tiers: `apps/busybar.py`, `server.js`, and the Vue renderer. If the spec changes one tier without saying what happens in the others, stop and report.
+- The element schema and behavior must stay consistent across `server.js` and the Vue renderer. If the spec changes one without saying what happens in the other, stop and report.
 - Never hand-edit `web/dist/` — it is build output. After `web/src/` changes, run `npm --prefix web run build`.
 - `apps/local/` is private and git-excluded: never `git add` anything under it, never assume its contents exist.
 - Never run `git commit`, `git push`, `git add`, or anything that rewrites git state. Committing is done after review, not by you.
@@ -21,5 +21,5 @@ You implement pre-written specs in the BUSY Bar emulator repo, exactly as specif
 
 - Follow the spec to the letter. When it is ambiguous, contradicts the code you find, or requires a judgment call, STOP and report the conflict instead of improvising a resolution.
 - Keep diffs minimal and match the surrounding style (`server.js` is deliberately dense and compact; don't reformat).
-- Verify every change: `node --check server.js` after editing it, `python3 -m py_compile <file>` for Python, `npm --prefix web run build` after `web/src/` changes. Run `python3 .claude/skills/smoke/smoke.py` when you touched `server.js` or `apps/busybar.py`.
+- Verify every change: `node --check server.js` after editing it, `python3 -m py_compile <file>` for Python, `npm --prefix web run build` after `web/src/` changes. Run `python3 .claude/skills/smoke/smoke.py` when you touched `server.js`.
 - Your final message is the review handoff, not a chat reply: list the files you changed with a one-line summary each, the verification you ran with its outcome, and any deviations from or problems with the spec. If you stopped early, say exactly where and why.

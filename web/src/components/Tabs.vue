@@ -21,7 +21,6 @@ const options = [
   { v: 'firmware', label: 'Firmware', icon: icons.chip },
   { v: 'settings', label: 'Settings', icon: icons.hexagon },
   { v: 'draw-tool', label: 'Draw tool', icon: icons.palette },
-  { v: 'apps', label: 'Apps', icon: icons.play },
   { v: 'scenarios', label: 'Scenarios', icon: icons.flask },
 ]
 </script>
