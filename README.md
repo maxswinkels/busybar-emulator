@@ -199,6 +199,12 @@ This is only an emulator. The BUSY Bar itself is a lovely piece of hardware buil
 
 <a href="https://busy.app"><strong>busy.app →</strong></a>
 
+## Related projects
+
+- **[busybar-manager](https://github.com/maxswinkels/busybar-manager)**: run apps on your bar. A local manager that installs, schedules and proxies 72×16 apps to a BUSY Bar (or this emulator), with autostart and a web dashboard.
+- **[busybar-apps](https://github.com/maxswinkels/busybar-apps)**: the apps. A community gallery of 72×16 apps to install from.
+- **[busy.app](https://busy.app)**: the real hardware and official apps from Flipper Devices.
+
 ## License
 
 Code is [MIT](LICENSE). Bundled fonts, animations, icons and device artwork are © Flipper Devices, from the open-source [firmware](https://github.com/busy-app/busybar-firmware) under CC-BY 4.0 (graphics) and SIL OFL 1.1 (fonts). See [docs/ATTRIBUTION.md](docs/ATTRIBUTION.md) for the details.
