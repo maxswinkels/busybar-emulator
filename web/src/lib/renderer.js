@@ -117,6 +117,83 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
     return true;
   }
 
+  // ---- uploaded .anim (bicycle0) decoder ---------------------------------
+  // Stock animations (playAnim above) live as PNG-frame folders. Apps like
+  // bad-apple instead upload the firmware's native binary .anim asset and draw
+  // it by path, so the browser preview must decode it itself: a 36-byte header,
+  // a per-section descriptor, then frames of Gray4 pixels (2 px/byte, value in
+  // the high nibble) with per-frame RLE and variable tick durations. Format
+  // reference: codynhanpham/BadApple busy-apple/generate_animation.py.
+  const animFileCache = {};   // key → parsed record | null (loading) | false (failed/not-anim)
+  function parseAnimFile(bytes) {
+    if (bytes.length < 57) return false;
+    for (let i = 0; i < 8; i++) if (bytes[i] !== "bicycle0".charCodeAt(i)) return false;
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const w = bytes[9] || 72, h = bytes[10] || 16, fps = bytes[12] || 30;
+    const sectionLength = dv.getUint32(16, true);
+    const numFrames = dv.getUint32(28, true);
+    const totalTicks = dv.getUint32(32, true) || 1;
+    let off = 36 + sectionLength;   // frame data begins after header + section descriptor
+    const frames = new Array(numFrames);
+    let tick = 0;
+    for (let i = 0; i < numFrames && off + 4 <= bytes.length; i++) {
+      const enc = bytes[off], dur = bytes[off + 1], dlen = dv.getUint16(off + 2, true);
+      off += 4;
+      frames[i] = { enc, dur, start: tick, dataOff: off, dlen };
+      off += dlen; tick += dur;
+    }
+    if (!frames.length || !frames[frames.length - 1]) return false;
+    return { w, h, fps, totalTicks, frames, bytes, decoded: new Array(numFrames) };
+  }
+  function frameIndexAtTick(rec, tick) {
+    const f = rec.frames; let lo = 0, hi = f.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (f[mid].start <= tick) lo = mid; else hi = mid - 1; }
+    return lo;
+  }
+  function decodeAnimFrame(rec, idx) {
+    if (rec.decoded[idx]) return rec.decoded[idx];
+    const f = rec.frames[idx]; if (!f) return null;
+    const bytes = rec.bytes, PIX = rec.w * rec.h, PACKED = PIX >> 1;
+    const packed = new Uint8Array(PACKED);
+    if (f.enc === 1) {   // native RLE: opcode<0x80 → repeat next byte; opcode|0x80 → that many literals
+      let si = f.dataOff, di = 0; const end = f.dataOff + f.dlen;
+      while (si < end && di < PACKED) {
+        const opc = bytes[si++];
+        if (opc & 0x80) { let n = opc & 0x7f; while (n-- > 0 && di < PACKED && si < end) packed[di++] = bytes[si++]; }
+        else { let n = opc; const v = bytes[si++]; while (n-- > 0 && di < PACKED) packed[di++] = v; }
+      }
+    } else {
+      packed.set(bytes.subarray(f.dataOff, f.dataOff + Math.min(f.dlen, PACKED)));
+    }
+    const gray = new Uint8Array(PIX);   // unpack Gray4: each nibble → 8-bit grey (nibble<<4)
+    for (let i = 0; i < PACKED; i++) { const b = packed[i]; gray[2 * i] = b & 0xf0; gray[2 * i + 1] = (b << 4) & 0xf0; }
+    rec.decoded[idx] = gray;
+    return gray;
+  }
+  function playAnimFile(path, el, t, start, op, appName) {
+    const key = (appName ? appName + "/" : "") + path;
+    const rec = animFileCache[key];
+    if (rec === undefined) {
+      animFileCache[key] = null;   // in-flight; keep the background until bytes arrive
+      const urls = appName ? ["/assets/" + encodeURI(key), "/assets/" + encodeURI(path)] : ["/assets/" + encodeURI(path)];
+      (async () => {
+        for (const url of urls) {
+          try { const r = await fetch(url); if (r.ok) { const parsed = parseAnimFile(new Uint8Array(await r.arrayBuffer())); if (parsed) { animFileCache[key] = parsed; return; } } } catch (_) {}
+        }
+        animFileCache[key] = false;
+      })();
+      return true;
+    }
+    if (!rec) return true;   // null (loading) or false (not a decodable .anim)
+    let tick = (t - start) * rec.fps;
+    if (el.loop === false) tick = Math.max(0, Math.min(tick, rec.totalTicks - 1));
+    else tick = ((tick % rec.totalTicks) + rec.totalTicks) % rec.totalTicks;
+    const gray = decodeAnimFrame(rec, frameIndexAtTick(rec, tick)); if (!gray) return true;
+    const [dx, dy] = anchor(el, rec.w, rec.h);
+    for (let iy = 0; iy < rec.h; iy++) for (let ix = 0; ix < rec.w; ix++) { const v = gray[iy * rec.w + ix]; if (v < 8) continue; pxa(dx + ix, dy + iy, v, v, v, op); }
+    return true;
+  }
+
   function lerpC(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t]; }
   function drawRect(el) {
     const w = el.width | 0, h = el.height | 0; if (w <= 0 || h <= 0) return;
@@ -146,7 +223,13 @@ export function createRenderer(cv, ocv, getModel, getStamp) {
       if (el.timeout && age > el.timeout) continue;
       if (el.display_until && nowUnix > +el.display_until) continue;
       const op = el.opacity == null ? 1 : Math.max(0, Math.min(1, el.opacity / 100));
-      if (el.type === "animation") { playAnim(el.stock_path || el.name || el.path, el, t, frameStamp, op); continue; }
+      if (el.type === "animation") {
+        const stock = el.stock_path || el.name || el.path;
+        if (stock && ANIM[stock]) playAnim(stock, el, t, frameStamp, op);       // stock PNG-frame folder
+        else if (el.path) playAnimFile(el.path, el, t, frameStamp, op, appName); // uploaded binary .anim asset
+        else playAnim(stock, el, t, frameStamp, op);
+        continue;
+      }
       if (el.type === "rectangle") { drawRect(el); continue; }
       if (el.type === "countdown") { drawCountdown(el, nowUnix); continue; }
       if (el.type === "image" || el.path || el.stock_path) {
