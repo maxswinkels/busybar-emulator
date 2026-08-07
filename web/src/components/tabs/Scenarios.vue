@@ -44,13 +44,23 @@
     <!-- 3. Device buttons -->
     <div class="card glass">
       <h2 class="card-title"><span class="badge" v-html="icons.hexagon"></span>Device buttons</h2>
+
+      <div class="lbl" style="margin-bottom:6px">Buttons</div>
       <div class="chips">
-        <button v-for="k in KEYS" :key="k" class="pill" @click="press(k)">{{ k }}</button>
+        <button v-for="b in BUTTONS" :key="b.key" class="pill" @click="press(b.key)">{{ b.label }}</button>
       </div>
+
+      <div class="lbl" style="margin:12px 0 6px">Wheel</div>
+      <div class="chips">
+        <button class="pill" @click="press('down')">Wheel ◀</button>
+        <button class="pill" @click="press('up')">Wheel ▶</button>
+      </div>
+
       <div
         class="status-line" style="margin-top:10px"
         :class="keyStatus.endsWith('OK') ? 'ok' : keyStatus ? 'err' : ''"
       >{{ keyStatus }}</div>
+      <div class="muted-note" style="margin-top:8px">Delivered to a running app over <code>/api/status/ws</code> as protobuf input — button press+release and wheel ±1 detent — exactly like the hardware. Point an app at the emulator to drive it.</div>
     </div>
 
     <!-- 4. Priority steal -->
@@ -103,7 +113,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { device, api, apiJson } from '../../composables/useDevice'
 import { icons } from '../../icons'
 
-const KEYS = ['up','down','ok','back','start','busy','custom','off','apps','settings']
+const BUTTONS = [
+  { key: 'ok', label: 'Ok / Skip' },
+  { key: 'back', label: 'Back' },
+  { key: 'start', label: 'Start / Pause' },
+]
 const fill = v => ({ '--fill': v + '%' })
 
 // ticking clock for the offline countdown (SSE only pushes on change)

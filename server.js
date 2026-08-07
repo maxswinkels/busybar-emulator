@@ -12,6 +12,7 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { createStatusWs, encodeInputKey } = require("./status_ws");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const TOKEN = process.env.BUSY_API_TOKEN || null;
@@ -531,6 +532,22 @@ function serveStatic(res, file) {
   });
 }
 
+/* ----------------- app-facing status stream (device→app) ----------------- */
+// Input events reach a running app only on the /api/status/ws WebSocket (busylib
+// stream_status_ws), so the Device-buttons UI drives real apps through here.
+// Auth mirrors the HTTP gate: no token → open; localhost always allowed;
+// otherwise the token must match (busylib passes it as ?x-api-token=).
+function wsAuthorize(req) {
+  const tok = effectiveToken();
+  if (!tok) return true;
+  const a = req.socket.remoteAddress || "";
+  if (a === "::1" || a.includes("127.0.0.1")) return true;
+  let qtok = null;
+  try { qtok = new URL(req.url, "http://localhost").searchParams.get("x-api-token"); } catch (_) {}
+  return req.headers["x-api-token"] === tok || qtok === tok;
+}
+const statusWs = createStatusWs({ authorize: wsAuthorize });
+
 /* -------------------------------- routes -------------------------------- */
 const server = http.createServer(async (req, res) => {
   let p, q;
@@ -746,7 +763,15 @@ const server = http.createServer(async (req, res) => {
     if (p === "/api/version" && method === "GET") { logCall("GET", p); return send(res, 200, { api_semver: API_SEMVER }); }
     if (p === "/api/transport" && method === "GET") { return send(res, 200, { type: isLocal(req) ? "usb" : "wifi" }); }
     if (p === "/api/access") { if (method === "GET") { const tok = effectiveToken(); return send(res, 200, { mode: tok ? "key" : "disabled", key_valid: !tok }); } if (method === "POST") { logCall("POST", p, q.mode); return ok(res); } }
-    if (p === "/api/input" && method === "POST") { const KEYS = ["up", "down", "ok", "back", "start", "busy", "custom", "off", "apps", "settings"]; if (!KEYS.includes(q.key)) return fail(res, 400, "bad key"); logCall("POST", p, q.key); emit("input", { key: q.key }); return ok(res); }
+    if (p === "/api/input" && method === "POST") {
+      const KEYS = ["up", "down", "ok", "back", "start", "busy", "custom", "off", "apps", "settings"];
+      if (!KEYS.includes(q.key)) return fail(res, 400, "bad key");
+      logCall("POST", p, q.key);
+      emit("input", { key: q.key });                          // web UI feedback (SSE)
+      const frames = encodeInputKey(q.key);                   // deliver to a running app (WS protobuf)
+      if (frames) for (const f of frames) statusWs.broadcast(f);
+      return ok(res);
+    }
     if (p === "/api/log_dump" && method === "POST") { logCall("POST", p, q.filename || ""); return ok(res, { path: `/ext/logs/${q.filename || "dump"}.txt` }); }
 
     /* ---- emulator: scenario simulator ---- */
@@ -855,9 +880,13 @@ const server = http.createServer(async (req, res) => {
   } catch (err) { fail(res, 400, err.message || "bad request"); }
 });
 
+// Device→app status stream: apps open this WebSocket for input events.
+server.on("upgrade", (req, socket) => statusWs.handleUpgrade(req, socket));
+
 server.listen(PORT, () => {
   console.log(`\n  BUSY Bar emulator running`);
   console.log(`  ├─ display : http://127.0.0.1:${PORT}/`);
   console.log(`  ├─ API base: http://127.0.0.1:${PORT}/api  (api_semver ${API_SEMVER})`);
+  console.log(`  ├─ status  : ws://127.0.0.1:${PORT}/api/status/ws  (input events)`);
   console.log(`  └─ ${Object.keys(ANIMATIONS).length} device animation(s)${TOKEN ? " · X-API-Token required for non-localhost" : ""}\n`);
 });
