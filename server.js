@@ -89,6 +89,7 @@ function loadState(st) {
 const BAR_SETTINGS = { theme: "busy", show_work_phase_only: false, trigger_smart_home: true };
 const state = {
   frame: { application_name: null, elements: [], ts: 0, priority: 0 },
+  appElements: {},                // per-app persistent element sets: firmware upserts by id and never auto-releases (only DELETE clears), capped at 100 — see mergeAppElements
   brightness: 80,                 // number 0-100 or "auto"
   volume: 0,
   name: "BUSY-EMULATOR",
@@ -134,6 +135,28 @@ function drawFrame(appName, elements, priority) {
   }
   state.frame = { application_name: appName, elements, ts: frameSeq++, priority };
   return true;
+}
+
+// Firmware keeps a persistent, id-keyed element set PER application_name: a draw
+// UPSERTS its elements into that set (match by id, replace in place) and never
+// releases the ones you stop sending — only DELETE /api/display/draw clears them.
+// The set is capped at 100 elements; the draw that would push it past 100 returns
+// 400 "Elements number limit exceeded". This is why an app that gives every frame
+// fresh ids slowly fills the set and then dies on hardware even though each single
+// draw is tiny. Returns the merged (accumulated) array, or null if it would exceed
+// the cap (in which case the prior set is left untouched, matching the device).
+const MAX_ELEMENTS = 100;
+function mergeAppElements(appName, incoming) {
+  const merged = (state.appElements[appName] || []).slice();
+  const indexById = new Map(merged.map((el, i) => [el.id, i]));
+  for (const el of incoming) {
+    const at = indexById.get(el.id);
+    if (at === undefined) { indexById.set(el.id, merged.length); merged.push(el); }
+    else merged[at] = el;                 // upsert in place — keep draw order stable
+  }
+  if (merged.length > MAX_ELEMENTS) return null;
+  state.appElements[appName] = merged;
+  return merged;
 }
 
 // Firmware schema (api_semver 25.0.0) draw contract: every element carries an
@@ -568,7 +591,6 @@ const server = http.createServer(async (req, res) => {
       if (!appName) return fail(res, 400, "Bad request: application_name required");
       const elements = b.elements;
       if (!Array.isArray(elements) || !elements.length) return fail(res, 400, "Nothing to display");
-      if (elements.length > 100) return fail(res, 400, "Elements number limit exceeded");
       let priority = b.priority == null ? 50 : b.priority;
       if (typeof priority !== "number" || priority < 1 || priority > 100) return fail(res, 400, "Bad request: priority 1-100");
       const drawErr = validateDrawBody(b);
@@ -583,13 +605,22 @@ const server = http.createServer(async (req, res) => {
       for (const el of elements) {
         if (el && el.type === "image" && el.path && state.assets[`${appName}/${el.path}`]) el.path = `${appName}/${el.path}`;
       }
-      if (!drawFrame(appName, elements, priority)) return fail(res, 409, "Not drawn due to low priority");
+      // Upsert into the app's persistent, id-keyed set (firmware never auto-releases
+      // elements you stop sending) and enforce the 100-element cap against that
+      // ACCUMULATED set, not just this payload — an app that hands every frame fresh
+      // ids fills the set and then 400s, exactly as it does on hardware. This gate is
+      // before the priority check, matching the device (>100 → 400 even for a non-owner).
+      const merged = mergeAppElements(appName, elements);
+      if (!merged) return fail(res, 400, "Elements number limit exceeded");
+      if (!drawFrame(appName, merged, priority)) return fail(res, 409, "Not drawn due to low priority");
       mirrorDisplay("POST", "/api/display/draw", { body: fwdBody });
       if (b.led_notification_color) emit("led", { color: b.led_notification_color });
-      logCall("POST", p, `${appName} · ${elements.length} el · pri ${priority}`); broadcast(); return ok(res);
+      logCall("POST", p, `${appName} · ${elements.length} el (${merged.length} stored) · pri ${priority}`); broadcast(); return ok(res);
     }
     if (p === "/api/display/draw" && method === "DELETE") {
       const app = q.application_name;
+      if (app) delete state.appElements[app];   // release this app's accumulated set
+      else state.appElements = {};              // no app → clear every app's set
       if (!app || state.frame.application_name === app || !state.frame.elements.length) {
         state.frame = { application_name: null, elements: [], ts: frameSeq++, priority: 0 };
       }
